@@ -8,6 +8,7 @@ pub fn generate_cli(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let name = &input.ident;
 
     let mut fields = quote! {};
+    let mut errors = quote! {};
 
     for field in &mut input.fields {
         let field_name = &field.ident;
@@ -17,7 +18,7 @@ pub fn generate_cli(_attr: TokenStream, item: TokenStream) -> TokenStream {
         let mut retain_attrs = vec![];
         for attr in field.attrs.drain(..) {
             if attr.path().is_ident("hill") {
-                attr.parse_nested_meta(|meta| {
+                let res = attr.parse_nested_meta(|meta| {
                     if meta.path.is_ident("candidates") {
                         let value: Expr = meta.value()?.parse()?;
                         clap_args.extend(quote! {
@@ -37,7 +38,12 @@ pub fn generate_cli(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         });
                     }
                     Ok(())
-                }).unwrap();
+                });
+                
+                if let Err(e) = res {
+                    let err = e.to_compile_error();
+                    errors.extend(quote! { #err });
+                }
             } else {
                 retain_attrs.push(attr);
             }
@@ -51,6 +57,7 @@ pub fn generate_cli(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let expanded = quote! {
+        #errors
         #[derive(clap::Parser, Debug)]
         pub struct #name {
             #fields

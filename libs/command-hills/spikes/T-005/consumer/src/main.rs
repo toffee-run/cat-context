@@ -24,8 +24,6 @@ struct Cli {
 }
 
 fn main() {
-    // We can use CompleteEnv from reexports to test it works exactly as in T-001
-    // But since the task only asks to compile and print candidates, we'll do it like T-001:
     use spike_lib::reexports::{CompleteEnv, Parser};
     CompleteEnv::with_factory(|| Cli::command()).complete();
     let cli = Cli::parse();
