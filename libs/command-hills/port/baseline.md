@@ -168,7 +168,7 @@ antigravity
 opencode
 ```
 
-### Значения флага --connect
+### Значения флага --connect (схемы)
 
 ```bash
 _CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX=2 COMPLETE=zsh cat-context --connect 
@@ -181,7 +181,6 @@ tcp\://
 http\://
 https\://
 ssh\://
-unix\:///var/run/docker.sock
 ```
 
 ### Значения флага --container (без демона Docker)
@@ -193,17 +192,15 @@ _CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX=3 COMPLETE=zsh cat-context stop --container
 ```
 ```
 
-### Значения флага --file (в корне проекта)
+### Значения флага --file (каталог с plan.md, notes.txt, sub/)
 
 ```bash
-_CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX=3 COMPLETE=zsh cat-context start --file 
+_CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX=3 COMPLETE=zsh cat-context start --file ""
 ```
 
 ```
 .
-libs/
-src/
-target/
-tests/
+plan.md
+sub/
 ```
 

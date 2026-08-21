@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure binary is built
 cargo build --bin cat-context --quiet
 
-BIN="target/debug/cat-context"
+BIN="$(pwd)/target/debug/cat-context"
 
 run_cmd() {
     local cmd=("$@")
@@ -40,6 +39,50 @@ run_completion() {
     echo ""
 }
 
+run_connect_completion() {
+    local title="$1"
+    local idx="$2"
+    shift 2
+    local cmd=("$@")
+    echo "### $title"
+    echo ""
+    echo '```bash'
+    echo "_CLAP_IFS=\$'\n' _CLAP_COMPLETE_INDEX=$idx COMPLETE=zsh cat-context ${cmd[*]}"
+    echo '```'
+    echo ""
+    echo '```'
+    local comp_out
+    comp_out=$(_CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX="$idx" COMPLETE=zsh "$BIN" -- cat-context "${cmd[@]}" 2>&1 | grep -E '^(unix|npipe|tcp|http|https|ssh)\\://$' || true)
+    if [ -n "$comp_out" ]; then
+        echo "$comp_out"
+    fi
+    echo '```'
+    echo ""
+}
+
+run_file_completion() {
+    local title="$1"
+    local fixture_dir="$(pwd)/target/file_completion_fixture"
+    rm -rf "$fixture_dir"
+    mkdir -p "$fixture_dir/sub"
+    touch "$fixture_dir/plan.md" "$fixture_dir/notes.txt"
+    echo "### $title"
+    echo ""
+    echo '```bash'
+    echo "_CLAP_IFS=\$'\n' _CLAP_COMPLETE_INDEX=3 COMPLETE=zsh cat-context start --file \"\""
+    echo '```'
+    echo ""
+    echo '```'
+    local comp_out
+    comp_out=$(cd "$fixture_dir" && _CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX=3 COMPLETE=zsh "$BIN" -- cat-context start --file "" 2>&1 || true)
+    if [ -n "$comp_out" ]; then
+        echo "$comp_out"
+    fi
+    echo '```'
+    echo ""
+    rm -rf "$fixture_dir"
+}
+
 echo "# Базовый снимок поведения CLI (cat-context)"
 echo ""
 echo "## Разбор аргументов"
@@ -47,7 +90,6 @@ echo ""
 echo "| Команда | Код возврата | Первая строка вывода |"
 echo "|---|---|---|"
 
-# Общие / help / version / ошибки
 run_cmd --help
 run_cmd -h
 run_cmd help
@@ -58,7 +100,6 @@ run_cmd -u
 run_cmd unknown_subcmd
 run_cmd --connect invalid://host
 
-# start
 run_cmd start --help
 run_cmd start -h
 run_cmd start help
@@ -79,7 +120,6 @@ run_cmd start --base alpine --agent codex --no-prompt
 run_cmd start --base debian --agent claude-code --text привет
 run_cmd start --base arch --agent opencode --file plan.md
 
-# restart
 run_cmd restart --help
 run_cmd restart -h
 run_cmd restart help
@@ -98,7 +138,6 @@ run_cmd restart --container c1 --base alpine --no-prompt --save
 run_cmd restart --container c1 --base debian --text привет --no-save
 run_cmd restart --container c1 --base arch --file plan.md --save
 
-# stop
 run_cmd stop --help
 run_cmd stop -h
 run_cmd stop help
@@ -111,7 +150,6 @@ run_cmd stop --save
 run_cmd stop --no-save
 run_cmd stop --container c1
 
-# delete
 run_cmd delete --help
 run_cmd delete -h
 run_cmd delete help
@@ -134,7 +172,7 @@ run_completion "Флаги подкоманды stop" 2 stop ""
 run_completion "Флаги подкоманды delete" 2 delete ""
 run_completion "Значения флага --base" 3 start --base ""
 run_completion "Значения флага --agent" 3 start --agent ""
-run_completion "Значения флага --connect" 2 --connect ""
+run_connect_completion "Значения флага --connect (схемы)" 2 --connect ""
 run_completion "Значения флага --container (без демона Docker)" 3 stop --container ""
-run_completion "Значения флага --file (в корне проекта)" 3 start --file ""
+run_file_completion "Значения флага --file (каталог с plan.md, notes.txt, sub/)"
 
