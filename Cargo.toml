@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bollard = { version = "0.21.1", default-features = false, features = ["http", "pipe", "ssh", "ssl"] }
+clap = { version = "4.6.6", default-features = false, features = ["error-context", "help", "std", "suggestions", "usage", "derive", "env", "wrap_help", "string"] }
+clap_complete = { version = "4.6.9", default-features = false, features = ["unstable-dynamic"] }
+inquire = { version = "0.9.4", default-features = false, features = ["crossterm"] }
+tokio = { version = "1.53.1", default-features = false, features = ["rt", "macros"] }
