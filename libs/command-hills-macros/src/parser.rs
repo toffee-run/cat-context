@@ -1,73 +1,97 @@
+use proc_macro2::TokenStream;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
     Attribute, Error, Expr, Field as SynField, Fields, GenericArgument, ItemStruct, Meta,
     PathArguments, Result, Token, Type,
-    parse::{Parse, ParseStream},
 };
 
 use crate::model::{Declaration, Field, Marker};
 
-const DECLARATION_ATTRIBUTE: &str = "command_hill";
 const CLAP_ATTRIBUTES: &[&str] = &["arg", "command"];
 const EXCEPTION_MARKERS: &[&str] = &["Only"];
 
-impl Parse for Declaration {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let item = input.parse::<ItemStruct>()?;
-        let target = parse_target(&item)?;
-        let clap_attributes = clap_attributes(&item.attrs);
-        let fields = parse_fields(&item)?;
-
-        Ok(Self {
-            ident: item.ident,
-            target,
-            clap_attributes,
-            fields,
-        })
-    }
-}
-
-fn parse_target(item: &ItemStruct) -> Result<syn::Path> {
-    let mut target = None;
-
-    for attribute in item
-        .attrs
-        .iter()
-        .filter(|attribute| attribute.path().is_ident(DECLARATION_ATTRIBUTE))
-    {
-        let entries = attribute.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
-
-        for entry in entries {
-            if let Meta::NameValue(value) = entry
-                && value.path.is_ident("target")
-            {
-                let Expr::Path(path) = value.value else {
-                    return Err(Error::new_spanned(
-                        value.value,
-                        format!("целевой тип структуры `{}` должен быть путём", item.ident),
-                    ));
-                };
-
-                if target.replace(path.path).is_some() {
-                    return Err(Error::new_spanned(
-                        value.path,
-                        format!(
-                            "целевой тип структуры `{}` указан несколько раз",
-                            item.ident
-                        ),
-                    ));
-                }
-            }
-        }
-    }
-
-    target.ok_or_else(|| {
+pub(crate) fn parse_declaration(arguments: TokenStream, input: TokenStream) -> Result<Declaration> {
+    let item = syn::parse2::<ItemStruct>(input)?;
+    let options = syn::parse2::<Options>(arguments)?;
+    let target = options.target.ok_or_else(|| {
         Error::new(
             item.ident.span(),
             format!("для структуры `{}` не указан целевой тип", item.ident),
         )
+    })?;
+    let context = options.context.ok_or_else(|| {
+        Error::new(
+            item.ident.span(),
+            format!("для структуры `{}` не указан тип контекста", item.ident),
+        )
+    })?;
+    let fields = parse_fields(&item)?;
+
+    Ok(Declaration {
+        visibility: item.vis,
+        ident: item.ident,
+        generics: item.generics,
+        target,
+        context,
+        clap_attributes: clap_attributes(&item.attrs),
+        fields,
     })
+}
+
+#[derive(Default)]
+struct Options {
+    target: Option<syn::Path>,
+    context: Option<syn::Path>,
+}
+
+impl syn::parse::Parse for Options {
+    fn parse(input: syn::parse::ParseStream<'_>) -> Result<Self> {
+        let entries = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
+        let mut options = Self::default();
+
+        for entry in entries {
+            let Meta::NameValue(value) = entry else {
+                return Err(Error::new_spanned(
+                    entry,
+                    "ожидался параметр в форме `имя = Тип`",
+                ));
+            };
+            let Some(name) = value.path.get_ident() else {
+                return Err(Error::new_spanned(value.path, "ожидалось имя параметра"));
+            };
+            let Expr::Path(path) = value.value else {
+                return Err(Error::new_spanned(
+                    value.value,
+                    format!("значение параметра `{name}` должно быть путём"),
+                ));
+            };
+
+            match name.to_string().as_str() {
+                "target" => set_once(&mut options.target, path.path, name)?,
+                "context" => set_once(&mut options.context, path.path, name)?,
+                _ => {
+                    return Err(Error::new(
+                        name.span(),
+                        format!("неизвестный параметр `{name}`"),
+                    ));
+                }
+            }
+        }
+
+        Ok(options)
+    }
+}
+
+fn set_once(slot: &mut Option<syn::Path>, value: syn::Path, name: &syn::Ident) -> Result<()> {
+    if slot.replace(value).is_some() {
+        return Err(Error::new(
+            name.span(),
+            format!("параметр `{name}` указан несколько раз"),
+        ));
+    }
+
+    Ok(())
 }
 
 fn parse_fields(item: &ItemStruct) -> Result<Vec<Field>> {
@@ -97,6 +121,7 @@ fn parse_field(field: &SynField, position: usize) -> Result<Field> {
     let markers = parse_markers(field, &ident)?;
 
     Ok(Field {
+        visibility: field.vis.clone(),
         ident,
         ty: field.ty.clone(),
         position,
@@ -130,16 +155,17 @@ fn parse_markers(field: &SynField, field_ident: &syn::Ident) -> Result<Vec<Marke
             None
         }
     });
+    let Some(inner_type) = type_arguments.next() else {
+        return Err(invalid_marker_error(field, field_ident, &segment.ident));
+    };
 
-    if type_arguments.next().is_none()
-        || type_arguments.next().is_some()
-        || arguments.args.len() != 1
-    {
+    if type_arguments.next().is_some() || arguments.args.len() != 1 {
         return Err(invalid_marker_error(field, field_ident, &segment.ident));
     }
 
     Ok(vec![Marker {
         ident: segment.ident.clone(),
+        inner_type: inner_type.clone(),
     }])
 }
 
@@ -164,14 +190,23 @@ fn clap_attributes(attributes: &[Attribute]) -> Vec<Attribute> {
 
 #[cfg(test)]
 mod tests {
-    use quote::ToTokens;
+    use quote::{ToTokens, quote};
 
     use super::*;
 
+    fn parse(arguments: TokenStream, input: TokenStream) -> Result<Declaration> {
+        parse_declaration(arguments, input)
+    }
+
     #[test]
     fn parses_regular_field() {
-        let declaration = syn::parse_str::<Declaration>(
-            "#[command_hill(target = Action::Start)] struct Start { base: Option<Base> }",
+        let declaration = parse(
+            quote!(target = Action::Start, context = Docker),
+            quote!(
+                struct Start {
+                    base: Option<Base>,
+                }
+            ),
         )
         .expect("обычное поле должно разбираться");
 
@@ -180,6 +215,7 @@ mod tests {
             declaration.target.to_token_stream().to_string(),
             "Action :: Start"
         );
+        assert_eq!(declaration.context.to_token_stream().to_string(), "Docker");
         assert_eq!(declaration.fields.len(), 1);
         assert_eq!(declaration.fields[0].ident, "base");
         assert_eq!(
@@ -191,8 +227,16 @@ mod tests {
 
     #[test]
     fn preserves_clap_attributes() {
-        let declaration = syn::parse_str::<Declaration>(
-            "#[command_hill(target = Action::Start)] #[command(rename_all = \"kebab-case\")] struct Start { #[arg(long, value_parser = parse_base)] #[command(flatten)] base: Base }",
+        let declaration = parse(
+            quote!(target = Action::Start, context = Docker),
+            quote!(
+                #[command(rename_all = "kebab-case")]
+                struct Start {
+                    #[arg(long, value_parser = parse_base)]
+                    #[command(flatten)]
+                    base: Base,
+                }
+            ),
         )
         .expect("атрибуты clap должны разбираться");
 
@@ -218,19 +262,38 @@ mod tests {
 
     #[test]
     fn recognizes_exception_marker() {
-        let declaration = syn::parse_str::<Declaration>(
-            "#[command_hill(target = Action::Restart)] struct Restart { no_save: Only<bool> }",
+        let declaration = parse(
+            quote!(target = Action::Restart, context = Docker),
+            quote!(
+                struct Restart {
+                    no_save: Only<bool>,
+                }
+            ),
         )
         .expect("пометка исключения должна разбираться");
 
         assert_eq!(declaration.fields[0].markers.len(), 1);
         assert_eq!(declaration.fields[0].markers[0].ident, "Only");
+        assert_eq!(
+            declaration.fields[0].markers[0]
+                .inner_type
+                .to_token_stream()
+                .to_string(),
+            "bool"
+        );
     }
 
     #[test]
     fn preserves_field_order() {
-        let declaration = syn::parse_str::<Declaration>(
-            "#[command_hill(target = Action::Restart)] struct Restart { container: String, base: Option<Base>, save: bool }",
+        let declaration = parse(
+            quote!(target = Action::Restart, context = Docker),
+            quote! {
+                struct Restart {
+                    container: String,
+                    base: Option<Base>,
+                    save: bool,
+                }
+            },
         )
         .expect("несколько полей должны разбираться");
 
@@ -251,9 +314,16 @@ mod tests {
 
     #[test]
     fn rejects_missing_target() {
-        let error = syn::parse_str::<Declaration>("struct Restart { base: Option<Base> }")
-            .err()
-            .expect("отсутствующий целевой тип должен давать ошибку");
+        let error = parse(
+            quote!(context = Docker),
+            quote!(
+                struct Restart {
+                    base: Option<Base>,
+                }
+            ),
+        )
+        .err()
+        .expect("отсутствующий целевой тип должен давать ошибку");
 
         assert!(error.to_string().contains("Restart"));
         assert!(error.to_string().contains("целевой тип"));
@@ -261,8 +331,13 @@ mod tests {
 
     #[test]
     fn marker_error_names_problematic_field() {
-        let error = syn::parse_str::<Declaration>(
-            "#[command_hill(target = Action::Restart)] struct Restart { no_save: Only }",
+        let error = parse(
+            quote!(target = Action::Restart, context = Docker),
+            quote!(
+                struct Restart {
+                    no_save: Only,
+                }
+            ),
         )
         .err()
         .expect("некорректная пометка должна давать ошибку");
