@@ -1,0 +1,3 @@
+[workspace]
+members = ["macro-crate", "consumer"]
+resolver = "2"

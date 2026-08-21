@@ -1,0 +1,39 @@
+[package]
+name = "spike-consumer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spike-macro = { path = "../macro-crate" }
+
+[[bin]]
+name = "attr_case1"
+path = "src/attr_case1.rs"
+
+[[bin]]
+name = "attr_case2"
+path = "src/attr_case2.rs"
+
+[[bin]]
+name = "attr_case3"
+path = "src/attr_case3.rs"
+
+[[bin]]
+name = "attr_case4"
+path = "src/attr_case4.rs"
+
+[[bin]]
+name = "derive_case1"
+path = "src/derive_case1.rs"
+
+[[bin]]
+name = "derive_case2"
+path = "src/derive_case2.rs"
+
+[[bin]]
+name = "derive_case3"
+path = "src/derive_case3.rs"
+
+[[bin]]
+name = "derive_case4"
+path = "src/derive_case4.rs"
