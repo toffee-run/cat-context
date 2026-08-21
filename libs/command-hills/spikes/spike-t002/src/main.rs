@@ -39,7 +39,6 @@ pub trait Resolve<Target> {
 
 pub struct Only<T>(PhantomData<T>);
 
-// -----------------------------------------------------------------------------
 
 #[derive(Args, Debug)]
 pub struct TargetArgs {
@@ -77,24 +76,7 @@ impl Resolve<Option<Prompt>> for PromptArgs {
     }
 }
 
-// -----------------------------------------------------------------------------
 
-/*
-#[command_hill(target = Action::Restart, context = Docker)]
-struct RestartCommand {
-    #[command(flatten)]
-    container: TargetArgs,
-
-    base: Option<Base>,
-
-    #[command(flatten)]
-    prompt: PromptArgs,
-
-    save: bool,
-
-    no_save: Only<bool>,
-}
-*/
 
 #[derive(Parser, Debug)]
 pub struct RestartCommandArgs {
