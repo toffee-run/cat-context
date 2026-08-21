@@ -11,9 +11,9 @@
 | `cat-context start --file plan.txt` | `2` / `error: invalid value 'plan.txt' for '--file <FILE>': нужен .md файл: plan.txt` | `0` / `<empty>` | Требование 5: PathBuf не валидирует .md |
 | `cat-context restart --file plan.txt` | `2` / `error: invalid value 'plan.txt' for '--file <FILE>': нужен .md файл: plan.txt` | `0` / `<empty>` | Требование 5: PathBuf не валидирует .md |
 
-## Машиночитаемые правила
+## Точные ожидаемые результаты
 
-```pattern
-cat-context start --file plan.txt
-cat-context restart --file plan.txt
+```expect
+cat-context start --file plan.txt | 0 | <empty>
+cat-context restart --file plan.txt | 0 | <empty>
 ```
