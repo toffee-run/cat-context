@@ -1,0 +1,9 @@
+[package]
+name = "spike-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.6.6", default-features = false, features = ["unstable-ext", "error-context", "std", "suggestions", "usage", "derive", "env", "string"] }
+clap_complete = { version = "4.6.9", default-features = false, features = ["unstable-dynamic"] }
+spike-macro = { path = "../macro-crate" }
