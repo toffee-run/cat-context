@@ -1,11 +1,23 @@
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote, quote_spanned};
+use quote::{ToTokens, format_ident, quote, quote_spanned};
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{Attribute, Error, Expr, Fields, LitStr, Meta, Path, Result, Token, Type, parenthesized};
 
 use crate::model::{Declaration, Destination, Field, Question};
+
+const CLAP_FIELD_KEYS: &[&str] = &[
+    "long",
+    "short",
+    "value_name",
+    "value_enum",
+    "add",
+    "default_value",
+    "env",
+    "conflicts_with",
+    "required",
+];
 
 pub(crate) fn expand(arguments: TokenStream, input: TokenStream) -> Result<TokenStream> {
     let context = parse_context(arguments)?;
@@ -230,8 +242,9 @@ fn parse_about(attributes: &[Attribute], variant: &syn::Ident) -> Result<LitStr>
     {
         attribute.parse_nested_meta(|meta| {
             if !meta.path.is_ident("about") {
+                let key = path_name(&meta.path);
                 return Err(meta.error(format!(
-                    "неизвестная пометка варианта `{variant}`; допустима только `about`"
+                    "неизвестная пометка `{key}` варианта `{variant}`; допустима только `about`"
                 )));
             }
             if about.is_some() {
@@ -324,7 +337,15 @@ fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<Command
             } else if meta.path.is_ident("command") {
                 quote!(command)
             } else {
-                return Err(meta.error(format!("неизвестная пометка поля `{ident}`")));
+                let key = path_name(&meta.path);
+                if CLAP_FIELD_KEYS.iter().any(|candidate| *candidate == key) {
+                    return Err(meta.error(format!(
+                        "ключ clap `{key}` поля `{ident}` нужно обернуть в `arg(...)`, например: `arg(long, value_name = \"NAME\")`"
+                    )));
+                }
+                return Err(meta.error(format!(
+                    "неизвестная пометка `{key}` поля `{ident}`; допустимы: `ask`, `keep`, `with`, `message`, `args`, `ctx`, `arg`, `command`"
+                )));
             };
             let content;
             parenthesized!(content in meta.input);
@@ -367,6 +388,13 @@ fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<Command
         resolver_message,
         clap_attributes,
     })
+}
+
+fn path_name(path: &Path) -> String {
+    match path.get_ident() {
+        Some(ident) => ident.to_string(),
+        None => path.to_token_stream().to_string(),
+    }
 }
 
 struct CommandField {

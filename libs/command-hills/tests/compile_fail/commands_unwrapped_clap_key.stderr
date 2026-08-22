@@ -1,0 +1,5 @@
+error: ключ clap `long` поля `container` нужно обернуть в `arg(...)`, например: `arg(long, value_name = "NAME")`
+  --> tests/compile_fail/commands_unwrapped_clap_key.rs:16:54
+   |
+16 |         #[hill(with = container, message = "Which?", long, value_name = "NAME")]
+   |                                                      ^^^^

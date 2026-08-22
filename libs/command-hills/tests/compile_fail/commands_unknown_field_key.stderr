@@ -1,0 +1,5 @@
+error: неизвестная пометка `magic` поля `container`; допустимы: `ask`, `keep`, `with`, `message`, `args`, `ctx`, `arg`, `command`
+ --> tests/compile_fail/commands_unknown_field_key.rs:7:16
+  |
+7 |         #[hill(magic = "x")]
+  |                ^^^^^
