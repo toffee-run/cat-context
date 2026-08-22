@@ -176,6 +176,7 @@ dependencies = [
 name = "command-hills-macros"
 version = "0.1.0"
 dependencies = [
+ "heck",
  "proc-macro2",
  "quote",
  "syn 3.0.3",
