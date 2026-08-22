@@ -1,0 +1,5 @@
+error: поле `value` не может сочетать пометки `ask` и `keep`
+ --> tests/compile_fail/commands_ask_with_keep.rs:7:31
+  |
+7 |         #[hill(ask = "Value", keep = "Value")]
+  |                               ^^^^

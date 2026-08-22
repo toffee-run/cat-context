@@ -1,4 +1,4 @@
-error: поле `container` должно содержать пометку `with`
+error: поле `container` должно содержать пометку `ask`, `keep` или `with`
  --> tests/compile_fail/commands_unmarked_field.rs:6:12
   |
 6 |     Stop { container: String },

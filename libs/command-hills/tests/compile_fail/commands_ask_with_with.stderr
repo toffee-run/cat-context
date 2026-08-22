@@ -1,0 +1,5 @@
+error: поле `value` не может сочетать `with` с `ask` или `keep`
+  --> tests/compile_fail/commands_ask_with_with.rs:13:9
+   |
+13 |         value: String,
+   |         ^^^^^
