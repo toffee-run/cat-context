@@ -1,0 +1,111 @@
+diff --git a/src/ask.rs b/src/ask.rs
+index b8202c7..50d7216 100644
+--- a/src/ask.rs
++++ b/src/ask.rs
+@@ -8,7 +8,7 @@ use inquire::autocompletion::{Autocomplete, Replacement};
+ use inquire::validator::Validation;
+ use inquire::{Confirm, CustomUserError, InquireError, Select, Text};
+ 
+-use crate::cli::{is_markdown, markdown_path};
++use crate::cli::is_markdown;
+ use crate::{Prompt, docker};
+ 
+ pub type Result<T> = std::result::Result<T, InquireError>;
+@@ -134,7 +134,6 @@ mod prompt_source_tests {
+ fn ask_file() -> Result<Prompt> {
+     let path = Text::new("Файл с промптом")
+         .with_autocomplete(MarkdownPaths)
+-        .with_validator(validate_markdown)
+         .prompt()?;
+ 
+     Ok(Prompt::File(PathBuf::from(path)))
+@@ -145,29 +144,6 @@ fn ask_text() -> Result<Prompt> {
+     Ok(Prompt::Text(text))
+ }
+ 
+-fn validate_markdown(input: &str) -> std::result::Result<Validation, CustomUserError> {
+-    match markdown_path(input) {
+-        Ok(_) => Ok(Validation::Valid),
+-        Err(message) => Ok(Validation::Invalid(message.into())),
+-    }
+-}
+-
+-#[cfg(test)]
+-mod validate_markdown_tests {
+-    use super::*;
+-
+-    #[test]
+-    fn markdown_validation_reports_the_extension() {
+-        assert!(matches!(
+-            validate_markdown("plan.md"),
+-            Ok(Validation::Valid)
+-        ));
+-        assert!(matches!(
+-            validate_markdown("plan.txt"),
+-            Ok(Validation::Invalid(_))
+-        ));
+-    }
+-}
+ 
+ enum Change<T> {
+     Keep,
+diff --git a/src/cli.rs b/src/cli.rs
+index f2a8899..5b1fca4 100644
+--- a/src/cli.rs
++++ b/src/cli.rs
+@@ -83,7 +83,6 @@ struct PromptArgs {
+     #[arg(
+         long,
+         value_name = "FILE",
+-        value_parser = markdown_path,
+         add = ArgValueCompleter::new(PathCompleter::any().filter(is_visitable)),
+     )]
+     file: Option<PathBuf>,
+@@ -211,8 +210,8 @@ mod argument_tests {
+     }
+ 
+     #[test]
+-    fn file_argument_takes_markdown_only() {
+-        assert!(rejects(&["cat-context", "start", "--file", "notes.txt"]));
++    fn file_argument_accepts_any_path() {
++        assert!(!rejects(&["cat-context", "start", "--file", "notes.txt"]));
+         assert!(!rejects(&["cat-context", "start", "--file", "notes.md"]));
+     }
+ 
+@@ -592,16 +591,6 @@ mod save_flag_tests {
+     }
+ }
+ 
+-pub fn markdown_path(value: &str) -> Result<PathBuf, String> {
+-    let path = PathBuf::from(value);
+-
+-    if is_markdown(&path) {
+-        Ok(path)
+-    } else {
+-        Err(format!("нужен .md файл: {value}"))
+-    }
+-}
+-
+ pub fn is_markdown(path: &Path) -> bool {
+     match path.extension() {
+         Some(extension) => extension.eq_ignore_ascii_case("md"),
+diff --git a/tests/prompt_files.rs b/tests/prompt_files.rs
+index c00f10a..3f50c71 100644
+--- a/tests/prompt_files.rs
++++ b/tests/prompt_files.rs
+@@ -1,14 +1,6 @@
+ use std::path::{Path, PathBuf};
+ 
+-use cat_context::cli::{is_markdown, markdown_path};
+-
+-#[test]
+-fn markdown_path_checks_the_extension() {
+-    assert_eq!(markdown_path("plan.md"), Ok(PathBuf::from("plan.md")));
+-    assert_eq!(markdown_path("plan.MD"), Ok(PathBuf::from("plan.MD")));
+-    assert!(markdown_path("plan.txt").is_err());
+-    assert!(markdown_path("plan").is_err());
+-}
++use cat_context::cli::is_markdown;
+ 
+ #[test]
+ fn markdown_is_recognised_by_extension() {
