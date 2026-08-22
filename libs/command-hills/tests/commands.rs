@@ -139,3 +139,79 @@ mod optional_field {
         );
     }
 }
+
+mod question_fields {
+    use clap::{Parser, ValueEnum};
+
+    #[derive(Clone, Debug, PartialEq, clap::ValueEnum)]
+    enum Base {
+        Alpine,
+        DebianSlim,
+        #[value(skip)]
+        Hidden,
+    }
+
+    struct Context;
+
+    #[command_hills::commands(context = Context)]
+    #[derive(Debug, PartialEq)]
+    enum Choice {
+        #[hill(about = "start")]
+        Start {
+            #[hill(ask = "Base", arg(long, value_enum))]
+            base: Base,
+        },
+        #[hill(about = "restart")]
+        Restart {
+            #[hill(keep = "Base", arg(long, value_enum))]
+            base: Option<Base>,
+        },
+    }
+
+    #[derive(Parser)]
+    struct Cli {
+        #[command(subcommand)]
+        choice: ChoiceArgs,
+    }
+
+    #[tokio::test]
+    async fn given_question_values_fill_without_terminal() {
+        let start = Cli::try_parse_from(["test", "start", "--base", "alpine"])
+            .expect("значение ask должно разбираться");
+        let restart = Cli::try_parse_from(["test", "restart", "--base", "debian-slim"])
+            .expect("значение keep должно разбираться");
+
+        assert_eq!(
+            fill(start.choice, &Context)
+                .await
+                .expect("ask должно заполняться заданным значением"),
+            Choice::Start { base: Base::Alpine }
+        );
+        assert_eq!(
+            fill(restart.choice, &Context)
+                .await
+                .expect("keep должно заполняться заданным значением"),
+            Choice::Restart {
+                base: Some(Base::DebianSlim)
+            }
+        );
+    }
+
+    #[test]
+    fn question_subcommands_parse_without_arguments() {
+        Cli::try_parse_from(["test", "start"]).expect("ask должен быть необязательным");
+        Cli::try_parse_from(["test", "restart"]).expect("keep должен быть необязательным");
+    }
+
+    #[test]
+    fn value_enum_names_exclude_hidden_variant() {
+        let _hidden = Base::Hidden;
+        let names = Base::value_variants()
+            .iter()
+            .filter_map(clap::ValueEnum::to_possible_value)
+            .map(|value| value.get_name().to_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(names, ["alpine", "debian-slim"]);
+    }
+}

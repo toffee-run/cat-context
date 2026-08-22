@@ -1,0 +1,24 @@
+error[E0277]: the trait bound `std::string::String: ValueEnum` is not satisfied
+ --> tests/compile_fail/commands_ask_requires_value_enum.rs:8:9
+  |
+8 |         value: String,
+  |         ^^^^^ the trait `ValueEnum` is not implemented for `std::string::String`
+  |
+help: the following other types implement trait `ValueEnum`
+ --> $CARGO/clap_builder-$VERSION/src/util/color.rs
+  |
+  | impl ValueEnum for ColorChoice {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ColorChoice`
+  |
+ ::: $CARGO/clap_complete-$VERSION/src/aot/shells/shell.rs
+  |
+  | impl ValueEnum for Shell {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^ `clap_complete::aot::shells::shell::Shell`
+note: required by a bound in `command_hills::__private::ask_variant`
+ --> src/question.rs
+  |
+  | pub fn ask_variant<T>(message: &str, given: Option<T>) -> Result<T>
+  |        ----------- required by a bound in this function
+  | where
+  |     T: ValueEnum + Clone,
+  |        ^^^^^^^^^ required by this bound in `ask_variant`
