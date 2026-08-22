@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::punctuated::Punctuated;
 use syn::{Meta, Result, Token};
 
@@ -18,9 +18,25 @@ pub(crate) fn generate(declaration: Declaration) -> Result<TokenStream> {
     let resolved_fields = fields
         .iter()
         .filter(|field| field.markers.is_empty())
-        .map(|field| resolve_field(field))
+        .map(|field| resolve_field(field, context.is_some()))
         .collect::<Result<Vec<_>>>()?;
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
+    let resolve = match context {
+        Some(context) => quote! {
+            pub async fn resolve(self, ctx: &#context) -> ::command_hills::Result<#target> {
+                Ok(#target {
+                    #(#resolved_fields,)*
+                })
+            }
+        },
+        None => quote! {
+            pub fn resolve(self) -> ::command_hills::Result<#target> {
+                Ok(#target {
+                    #(#resolved_fields,)*
+                })
+            }
+        },
+    };
 
     Ok(quote! {
         #[derive(clap::Parser)]
@@ -30,12 +46,7 @@ pub(crate) fn generate(declaration: Declaration) -> Result<TokenStream> {
         }
 
         impl #impl_generics #ident #type_generics #where_clause {
-            pub fn resolve(self, ctx: &#context) -> #target {
-                let _ = ctx;
-                #target {
-                    #(#resolved_fields,)*
-                }
-            }
+            #resolve
         }
     })
 }
@@ -56,13 +67,44 @@ fn generate_field(field: &Field) -> TokenStream {
     }
 }
 
-fn resolve_field(field: &Field) -> Result<TokenStream> {
+fn resolve_field(field: &Field, has_context: bool) -> Result<TokenStream> {
     let ident = &field.ident;
+    let span = ident.span();
+
+    if let Some(question) = &field.question {
+        return Ok(match question {
+            crate::model::Question::Ask(message) => quote_spanned! {span=>
+                #ident: ::command_hills::__private::ask_variant(#message, self.#ident)?
+            },
+            crate::model::Question::Keep(message) => quote_spanned! {span=>
+                #ident: ::command_hills::__private::ask_variant_or_keep(#message, self.#ident)?
+            },
+        });
+    }
 
     if is_flattened(field)? {
-        Ok(quote!(#ident: ::command_hills::Resolve::resolve(self.#ident)))
+        if field.with_context {
+            if !has_context {
+                return Err(syn::Error::new(
+                    span,
+                    format!("полю `{ident}` с пометкой `ctx` нужен context у fill"),
+                ));
+            }
+            Ok(quote_spanned! {span=>
+                #ident: ::command_hills::ResolveWithCtx::resolve(self.#ident, ctx).await?
+            })
+        } else {
+            Ok(quote_spanned! {span=>
+                #ident: ::command_hills::Resolve::resolve(self.#ident)?
+            })
+        }
+    } else if field.with_context {
+        Err(syn::Error::new(
+            span,
+            format!("поле `{ident}` с пометкой `ctx` должно быть flatten"),
+        ))
     } else {
-        Ok(quote!(#ident: self.#ident))
+        Ok(quote_spanned! {span=> #ident: self.#ident})
     }
 }
 
@@ -111,9 +153,9 @@ mod tests {
         assert!(rendered.contains("derive (clap :: Parser)"));
         assert!(rendered.contains("base : self . base"));
         assert!(
-            rendered.contains("prompt : :: command_hills :: Resolve :: resolve (self . prompt)")
+            rendered.contains("prompt : :: command_hills :: Resolve :: resolve (self . prompt) ?")
         );
-        assert!(rendered.contains("ctx : & Docker"));
+        assert!(rendered.contains("async fn resolve"));
     }
 
     #[test]
@@ -133,7 +175,7 @@ mod tests {
         let rendered = generated.to_string();
 
         assert!(rendered.contains("arg (long)"));
-        assert!(!rendered.contains("hill"));
+        assert!(!rendered.contains("# [hill"));
     }
 
     #[test]
