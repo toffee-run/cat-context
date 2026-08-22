@@ -92,11 +92,11 @@ fn resolve_field(field: &Field, has_context: bool) -> Result<TokenStream> {
                 ));
             }
             Ok(quote_spanned! {span=>
-                #ident: ::command_hills::ResolveWithCtx::resolve(self.#ident, ctx).await?
+                #ident: ::command_hills::__private::resolve_field_with_ctx(self.#ident, ctx).await?
             })
         } else {
             Ok(quote_spanned! {span=>
-                #ident: ::command_hills::Resolve::resolve(self.#ident)?
+                #ident: ::command_hills::__private::resolve_field(self.#ident)?
             })
         }
     } else if field.with_context {
@@ -154,7 +154,9 @@ mod tests {
         assert!(rendered.contains("derive (clap :: Parser)"));
         assert!(rendered.contains("base : self . base"));
         assert!(
-            rendered.contains("prompt : :: command_hills :: Resolve :: resolve (self . prompt) ?")
+            rendered.contains(
+                "prompt : :: command_hills :: __private :: resolve_field (self . prompt) ?"
+            )
         );
         assert!(rendered.contains("async fn resolve"));
     }
