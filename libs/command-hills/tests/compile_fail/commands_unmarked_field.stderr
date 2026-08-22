@@ -1,0 +1,5 @@
+error: поле `container` должно содержать пометку `with`
+ --> tests/compile_fail/commands_unmarked_field.rs:6:12
+  |
+6 |     Stop { container: String },
+  |            ^^^^^^^^^
