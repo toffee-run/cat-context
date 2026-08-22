@@ -1,59 +1,15 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use bollard::Docker;
 use clap::CommandFactory;
 use clap_complete::CompleteEnv;
-use clap_complete::engine::{ArgValueCompleter, PathCompleter};
 use command_hills::{Resolve, Result};
 
 use crate::Prompt;
 use crate::ask;
 
-#[derive(clap::Args, Debug, Default)]
-#[group(multiple = false)]
-pub struct PromptArgs {
-    #[arg(
-        long,
-        value_name = "FILE",
-        add = ArgValueCompleter::new(PathCompleter::any().filter(is_visitable)),
-    )]
-    pub file: Option<PathBuf>,
-
-    #[arg(long, value_name = "TEXT")]
-    pub text: Option<String>,
-
-    #[arg(long)]
-    pub no_prompt: bool,
-}
-
-impl Resolve<Prompt> for PromptArgs {
-    fn resolve(self) -> Result<Prompt> {
-        if let Some(file) = self.file {
-            return Ok(Prompt::File(file));
-        }
-        if let Some(text) = self.text {
-            return Ok(Prompt::Text(text));
-        }
-        if self.no_prompt {
-            return Ok(Prompt::None);
-        }
-        ask::prompt()
-    }
-}
-
-impl Resolve<Option<Prompt>> for PromptArgs {
-    fn resolve(self) -> Result<Option<Prompt>> {
-        if let Some(file) = self.file {
-            return Ok(Some(Prompt::File(file)));
-        }
-        if let Some(text) = self.text {
-            return Ok(Some(Prompt::Text(text)));
-        }
-        if self.no_prompt {
-            return Ok(Some(Prompt::None));
-        }
-        ask::prompt_or_keep()
-    }
+pub fn ask_prompt() -> Result<Prompt> {
+    ask::prompt()
 }
 
 #[derive(clap::Args, Debug, Default)]
@@ -83,9 +39,9 @@ pub async fn container(given: Option<String>, docker: &Docker, message: &str) ->
 
 #[cfg(test)]
 mod argument_tests {
-    use super::*;
     use crate::{ActionArgs, Agent, Base, Cli};
     use clap::Parser;
+    use std::path::PathBuf;
 
     fn action_of(args: &[&str]) -> ActionArgs {
         Cli::try_parse_from(args)
@@ -108,7 +64,7 @@ mod argument_tests {
         assert!(args.agent.is_none());
         assert!(args.prompt.file.is_none());
         assert!(args.prompt.text.is_none());
-        assert!(!args.prompt.no_prompt);
+        assert!(!args.prompt.none);
     }
 
     #[test]
@@ -222,63 +178,74 @@ mod argument_tests {
 #[cfg(test)]
 mod resolve_prompt_tests {
     use super::*;
+    use crate::PromptArgs;
+    use std::path::PathBuf;
 
     #[test]
     fn explicit_prompt_arguments_resolve_into_prompt() {
         let file = PromptArgs {
             file: Some(PathBuf::from("plan.md")),
-            ..PromptArgs::default()
+            text: None,
+            none: false,
         };
         let text = PromptArgs {
+            file: None,
             text: Some("привет".to_owned()),
-            ..PromptArgs::default()
+            none: false,
         };
         let empty = PromptArgs {
-            no_prompt: true,
-            ..PromptArgs::default()
+            file: None,
+            text: None,
+            none: true,
         };
 
-        assert!(matches!(
-            Resolve::<Prompt>::resolve(file),
-            Ok(Prompt::File(_))
-        ));
-        assert!(matches!(
-            Resolve::<Prompt>::resolve(text),
-            Ok(Prompt::Text(_))
-        ));
-        assert!(matches!(
-            Resolve::<Prompt>::resolve(empty),
-            Ok(Prompt::None)
-        ));
+        assert_eq!(
+            Resolve::<Prompt>::resolve(file).unwrap(),
+            Prompt::File(PathBuf::from("plan.md"))
+        );
+        assert_eq!(
+            Resolve::<Prompt>::resolve(text).unwrap(),
+            Prompt::Text("привет".to_owned())
+        );
+        assert_eq!(Resolve::<Prompt>::resolve(empty).unwrap(), Prompt::None);
     }
 
     #[test]
     fn explicit_prompt_arguments_resolve_into_optional_prompt() {
         let file = PromptArgs {
             file: Some(PathBuf::from("plan.md")),
-            ..PromptArgs::default()
+            text: None,
+            none: false,
         };
         let text = PromptArgs {
+            file: None,
             text: Some("привет".to_owned()),
-            ..PromptArgs::default()
+            none: false,
         };
         let empty = PromptArgs {
-            no_prompt: true,
-            ..PromptArgs::default()
+            file: None,
+            text: None,
+            none: true,
+        };
+        let untouched = PromptArgs {
+            file: None,
+            text: None,
+            none: false,
         };
 
-        assert!(matches!(
-            Resolve::<Option<Prompt>>::resolve(file),
-            Ok(Some(Prompt::File(_)))
-        ));
-        assert!(matches!(
-            Resolve::<Option<Prompt>>::resolve(text),
-            Ok(Some(Prompt::Text(_)))
-        ));
-        assert!(matches!(
-            Resolve::<Option<Prompt>>::resolve(empty),
-            Ok(Some(Prompt::None))
-        ));
+        assert_eq!(
+            Resolve::<Option<Prompt>>::resolve(file).unwrap(),
+            Some(Prompt::File(PathBuf::from("plan.md")))
+        );
+        assert_eq!(
+            Resolve::<Option<Prompt>>::resolve(text).unwrap(),
+            Some(Prompt::Text("привет".to_owned()))
+        );
+        assert_eq!(
+            Resolve::<Option<Prompt>>::resolve(empty).unwrap(),
+            Some(Prompt::None)
+        );
+        assert_eq!(Resolve::<Option<Prompt>>::resolve(untouched).unwrap(), None);
     }
 }
 
@@ -471,7 +438,7 @@ pub fn is_markdown(path: &Path) -> bool {
     }
 }
 
-fn is_visitable(path: &Path) -> bool {
+pub fn is_visitable(path: &Path) -> bool {
     path.is_dir() || is_markdown(path)
 }
 

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use bollard::Docker;
 use clap::ValueEnum;
-use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter};
+use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter, PathCompleter};
 use inquire::InquireError;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, ValueEnum)]
@@ -27,10 +27,18 @@ pub enum Agent {
     Opencode,
 }
 
-#[derive(Clone, Debug, Default)]
+#[command_hills::group(fallback = cli::ask_prompt)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum Prompt {
+    #[hill(arg(
+        long,
+        value_name = "FILE",
+        add = ArgValueCompleter::new(PathCompleter::any().filter(cli::is_visitable))
+    ))]
     File(PathBuf),
+    #[hill(arg(long, value_name = "TEXT"))]
     Text(String),
+    #[hill(arg(long = "no-prompt"))]
     #[default]
     None,
 }
@@ -44,7 +52,7 @@ pub enum Action {
         base: Base,
         #[hill(ask = "Агент", arg(long, value_enum, value_name = "AGENT"))]
         agent: Agent,
-        #[hill(args = cli::PromptArgs)]
+        #[hill(args = PromptArgs)]
         prompt: Prompt,
     },
     #[hill(about = "пересоздать контейнер")]
@@ -61,7 +69,7 @@ pub enum Action {
         container: String,
         #[hill(keep = "Базовый образ", arg(long, value_enum, value_name = "BASE"))]
         base: Option<Base>,
-        #[hill(args = cli::PromptArgs)]
+        #[hill(args = PromptArgs)]
         prompt: Option<Prompt>,
         #[hill(args = cli::SaveArgs)]
         save: bool,
