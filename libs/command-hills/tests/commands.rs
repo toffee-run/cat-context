@@ -164,7 +164,7 @@ mod question_fields {
         #[hill(about = "restart")]
         Restart {
             #[hill(keep = "Base", arg(long, value_enum))]
-            base: Option<Base>,
+            base: std::option::Option<Base>,
         },
     }
 
