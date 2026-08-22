@@ -1,0 +1,5 @@
+error: commands можно применять только к перечислению; `Action` является структурой
+ --> tests/compile_fail/commands_on_struct.rs:4:8
+  |
+4 | struct Action {
+  |        ^^^^^^

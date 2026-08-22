@@ -3,16 +3,30 @@ use quote::{format_ident, quote, quote_spanned};
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{
-    Attribute, Error, Expr, Fields, ItemEnum, LitStr, Meta, Path, Result, Token, Type,
-    parenthesized,
-};
+use syn::{Attribute, Error, Expr, Fields, LitStr, Meta, Path, Result, Token, Type, parenthesized};
 
 use crate::model::{Declaration, Destination, Field, Question};
 
 pub(crate) fn expand(arguments: TokenStream, input: TokenStream) -> Result<TokenStream> {
     let context = parse_context(arguments)?;
-    let mut item = syn::parse2::<ItemEnum>(input)?;
+    let mut item = match syn::parse2::<syn::Item>(input)? {
+        syn::Item::Enum(item) => item,
+        syn::Item::Struct(item) => {
+            return Err(Error::new(
+                item.ident.span(),
+                format!(
+                    "commands можно применять только к перечислению; `{}` является структурой",
+                    item.ident
+                ),
+            ));
+        }
+        item => {
+            return Err(Error::new_spanned(
+                item,
+                "commands можно применять только к перечислению",
+            ));
+        }
+    };
     let enum_ident = item.ident.clone();
     let args_ident = format_ident!("{}Args", enum_ident);
     let visibility = item.vis.clone();
@@ -25,11 +39,22 @@ pub(crate) fn expand(arguments: TokenStream, input: TokenStream) -> Result<Token
         variant
             .attrs
             .retain(|attribute| !attribute.path().is_ident("hill"));
+        if matches!(&variant.fields, Fields::Unit) {
+            let variant_ident = &variant.ident;
+            argument_variants.push(quote_spanned! {variant_ident.span()=>
+                #[command(about = #about)]
+                #variant_ident
+            });
+            fill_arms.push(quote_spanned! {variant_ident.span()=>
+                #args_ident::#variant_ident => Ok(#enum_ident::#variant_ident)
+            });
+            continue;
+        }
         let Fields::Named(fields) = &mut variant.fields else {
             return Err(Error::new_spanned(
                 &variant.fields,
                 format!(
-                    "вариант `{}` должен содержать именованные поля",
+                    "вариант `{}` должен быть без полей или содержать именованные поля",
                     variant.ident
                 ),
             ));
@@ -205,7 +230,9 @@ fn parse_about(attributes: &[Attribute], variant: &syn::Ident) -> Result<LitStr>
     {
         attribute.parse_nested_meta(|meta| {
             if !meta.path.is_ident("about") {
-                return Err(meta.error(format!("неизвестная пометка варианта `{variant}`")));
+                return Err(meta.error(format!(
+                    "неизвестная пометка варианта `{variant}`; допустима только `about`"
+                )));
             }
             if about.is_some() {
                 return Err(meta.error(format!(

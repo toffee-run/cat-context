@@ -1,0 +1,5 @@
+error: вариант `Stop` должен быть без полей или содержать именованные поля
+ --> tests/compile_fail/commands_tuple_variant.rs:6:9
+  |
+6 |     Stop(String),
+  |         ^^^^^^^^

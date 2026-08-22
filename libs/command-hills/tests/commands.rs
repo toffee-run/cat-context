@@ -223,3 +223,44 @@ mod question_fields {
         assert_eq!(names, ["alpine", "debian-slim"]);
     }
 }
+
+mod unit_variant {
+    use clap::{CommandFactory, Parser};
+
+    struct Context;
+
+    #[command_hills::commands(context = Context)]
+    #[derive(Debug, PartialEq)]
+    enum Action {
+        #[hill(about = "list containers")]
+        List,
+    }
+
+    #[derive(Parser)]
+    struct Cli {
+        #[command(subcommand)]
+        action: ActionArgs,
+    }
+
+    #[tokio::test]
+    async fn unit_subcommand_parses_appears_in_menu_and_fills() {
+        let cli =
+            Cli::try_parse_from(["test", "list"]).expect("вариант без полей должен разбираться");
+        let command = Cli::command();
+        let list = command
+            .get_subcommands()
+            .find(|subcommand| subcommand.get_name() == "list")
+            .expect("вариант без полей должен попасть в меню");
+
+        assert_eq!(
+            list.get_about().map(ToString::to_string),
+            Some("list containers".to_owned())
+        );
+        assert_eq!(
+            fill(cli.action, &Context)
+                .await
+                .expect("вариант без полей должен заполняться"),
+            Action::List
+        );
+    }
+}

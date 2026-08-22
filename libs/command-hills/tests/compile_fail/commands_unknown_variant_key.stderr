@@ -1,0 +1,5 @@
+error: неизвестная пометка варианта `List`; допустима только `about`
+ --> tests/compile_fail/commands_unknown_variant_key.rs:5:28
+  |
+5 |     #[hill(about = "list", unknown = "x")]
+  |                            ^^^^^^^
