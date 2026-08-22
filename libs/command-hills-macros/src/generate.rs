@@ -72,6 +72,14 @@ fn resolve_field(field: &Field, has_context: bool) -> Result<TokenStream> {
     let ident = &field.ident;
     let span = ident.span();
 
+    if let Some(resolver) = &field.resolver {
+        return Ok(if has_context {
+            quote_spanned! {span=> #ident: #resolver(self.#ident, ctx).await?}
+        } else {
+            quote_spanned! {span=> #ident: #resolver(self.#ident)?}
+        });
+    }
+
     if let Some(question) = &field.question {
         return Ok(match question {
             crate::model::Question::Ask(message) => quote_spanned! {span=>
