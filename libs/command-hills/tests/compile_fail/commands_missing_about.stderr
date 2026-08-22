@@ -1,0 +1,5 @@
+error: у варианта `List` отсутствует пометка `about`
+ --> tests/compile_fail/commands_missing_about.rs:5:5
+  |
+5 |     List,
+  |     ^^^^
