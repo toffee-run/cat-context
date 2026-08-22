@@ -7,7 +7,7 @@ pub struct Target {
 #[generate_resolve]
 pub struct Args {
     pub container: String,
-    pub extra: String, // The macro will map this, triggering extra field error in Target
+    pub extra: String,
 }
 
 fn main() {}

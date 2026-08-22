@@ -6,7 +6,7 @@ pub struct Target {
 
 #[generate_resolve]
 pub struct Args {
-    pub container: Option<String>, // Type mismatch
+    pub container: Option<String>,
 }
 
 fn main() {}

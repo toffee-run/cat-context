@@ -7,7 +7,7 @@ pub struct Target {
 #[generate_resolve]
 pub struct Args {
     #[unknown]
-    pub container: String, // Unknown attribute triggers custom macro error
+    pub container: String,
 }
 
 fn main() {}
