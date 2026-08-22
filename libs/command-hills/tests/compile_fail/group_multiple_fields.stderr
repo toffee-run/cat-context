@@ -1,0 +1,5 @@
+error: вариант `Value` в group должен содержать ровно одно безымянное поле
+ --> tests/compile_fail/group_multiple_fields.rs:7:10
+  |
+7 |     Value(String, String),
+  |          ^^^^^^^^^^^^^^^^

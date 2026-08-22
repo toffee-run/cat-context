@@ -3,9 +3,19 @@ use proc_macro::TokenStream;
 mod clean;
 mod commands;
 mod generate;
+mod group;
 mod model;
 mod parser;
 mod root;
+
+#[proc_macro_attribute]
+pub fn group(arguments: TokenStream, input: TokenStream) -> TokenStream {
+    let original = input.clone().into();
+    match group::expand(arguments.into(), input.into()) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => clean::preserve_item(error, original).into(),
+    }
+}
 
 #[proc_macro_attribute]
 pub fn root(arguments: TokenStream, input: TokenStream) -> TokenStream {
