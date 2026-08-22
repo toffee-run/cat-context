@@ -1,0 +1,5 @@
+error: перечисление `Prompt` должно указать `fallback` в макросе group
+ --> tests/compile_fail/group_missing_fallback.rs:2:6
+  |
+2 | enum Prompt {
+  |      ^^^^^^

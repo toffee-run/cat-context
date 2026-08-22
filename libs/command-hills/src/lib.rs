@@ -1,4 +1,4 @@
-pub use command_hills_macros::{commands, fill, root};
+pub use command_hills_macros::{commands, fill, group, root};
 
 pub type Result<T> = std::result::Result<T, inquire::InquireError>;
 
