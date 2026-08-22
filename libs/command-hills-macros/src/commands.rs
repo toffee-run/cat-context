@@ -51,22 +51,25 @@ pub(crate) fn expand(arguments: TokenStream, input: TokenStream) -> Result<Token
                     syn::parse2(quote_spanned!(ty.span()=> Option<#ty>))?
                 }
                 (None, None, Some(Question::Keep(_))) => {
-                    if crate::parser::option_inner_type(&ty).is_none() {
+                    let Some(inner) = crate::parser::option_inner_type(&ty) else {
                         return Err(Error::new_spanned(
                             &ty,
                             format!("поле `{ident}` с пометкой `keep` должно иметь тип Option<T>"),
                         ));
-                    }
-                    ty
+                    };
+                    syn::parse2(quote_spanned!(ty.span()=> Option<#inner>))?
                 }
-                (None, None, None) if crate::parser::option_inner_type(&ty).is_some() => ty,
                 (None, None, None) => {
-                    return Err(Error::new(
-                        ident.span(),
-                        format!(
-                            "поле `{ident}` должно содержать пометку `ask`, `keep`, `with` или `args`"
-                        ),
-                    ));
+                    if let Some(inner) = crate::parser::option_inner_type(&ty) {
+                        syn::parse2(quote_spanned!(ty.span()=> Option<#inner>))?
+                    } else {
+                        return Err(Error::new(
+                            ident.span(),
+                            format!(
+                                "поле `{ident}` должно содержать пометку `ask`, `keep`, `with` или `args`"
+                            ),
+                        ));
+                    }
                 }
                 _ => {
                     return Err(Error::new(
