@@ -6,7 +6,7 @@ use syn::{
     PathArguments, Result, Token, Type,
 };
 
-use crate::model::{Declaration, Field, Marker};
+use crate::model::{Declaration, Field, Marker, Question};
 
 const CLAP_ATTRIBUTES: &[&str] = &["arg", "command"];
 const EXCEPTION_MARKERS: &[&str] = &["Only"];
@@ -20,12 +20,6 @@ pub(crate) fn parse_declaration(arguments: TokenStream, input: TokenStream) -> R
             format!("для структуры `{}` не указан целевой тип", item.ident),
         )
     })?;
-    let context = options.context.ok_or_else(|| {
-        Error::new(
-            item.ident.span(),
-            format!("для структуры `{}` не указан тип контекста", item.ident),
-        )
-    })?;
     let fields = parse_fields(&item)?;
 
     Ok(Declaration {
@@ -33,7 +27,7 @@ pub(crate) fn parse_declaration(arguments: TokenStream, input: TokenStream) -> R
         ident: item.ident,
         generics: item.generics,
         target,
-        context,
+        context: options.context,
         clap_attributes: clap_attributes(&item.attrs),
         fields,
     })
@@ -119,6 +113,7 @@ fn parse_field(field: &SynField, position: usize) -> Result<Field> {
         .clone()
         .ok_or_else(|| Error::new(field.ty.span(), "ожидалось именованное поле"))?;
     let markers = parse_markers(field, &ident)?;
+    let (question, with_context) = parse_hill(field, &ident)?;
 
     Ok(Field {
         visibility: field.vis.clone(),
@@ -127,7 +122,87 @@ fn parse_field(field: &SynField, position: usize) -> Result<Field> {
         position,
         clap_attributes: clap_attributes(&field.attrs),
         markers,
+        question,
+        with_context,
     })
+}
+
+fn parse_hill(field: &SynField, field_ident: &syn::Ident) -> Result<(Option<Question>, bool)> {
+    let mut question = None;
+    let mut with_context = false;
+
+    for attribute in field
+        .attrs
+        .iter()
+        .filter(|attribute| attribute.path().is_ident("hill"))
+    {
+        attribute.parse_nested_meta(|meta| {
+            if meta.path.is_ident("ctx") {
+                if with_context {
+                    return Err(meta.error(format!(
+                        "пометка `ctx` поля `{field_ident}` указана несколько раз"
+                    )));
+                }
+                with_context = true;
+                return Ok(());
+            }
+
+            let kind = if meta.path.is_ident("ask") {
+                "ask"
+            } else if meta.path.is_ident("keep") {
+                "keep"
+            } else {
+                return Err(meta.error(format!("неизвестная пометка поля `{field_ident}`")));
+            };
+            let message = meta.value()?.parse::<syn::LitStr>()?;
+            if question.is_some() {
+                return Err(meta.error(format!(
+                    "поле `{field_ident}` содержит несколько пометок вопроса"
+                )));
+            }
+            question = Some(if kind == "ask" {
+                Question::Ask(message)
+            } else {
+                Question::Keep(message)
+            });
+            Ok(())
+        })?;
+    }
+
+    if question.is_some() && with_context {
+        return Err(Error::new(
+            field_ident.span(),
+            format!("поле `{field_ident}` не может одновременно содержать вопрос и `ctx`"),
+        ));
+    }
+    if question.is_some() && option_inner_type(&field.ty).is_none() {
+        return Err(Error::new_spanned(
+            &field.ty,
+            format!("поле `{field_ident}` с вопросом должно иметь тип Option<T>"),
+        ));
+    }
+
+    Ok((question, with_context))
+}
+
+fn option_inner_type(ty: &Type) -> Option<&Type> {
+    let Type::Path(type_path) = ty else {
+        return None;
+    };
+    let segment = type_path.path.segments.last()?;
+    if segment.ident != "Option" {
+        return None;
+    }
+    let PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+    if arguments.args.len() != 1 {
+        return None;
+    }
+    match arguments.args.first()? {
+        GenericArgument::Type(inner) => Some(inner),
+        _ => None,
+    }
 }
 
 fn parse_markers(field: &SynField, field_ident: &syn::Ident) -> Result<Vec<Marker>> {
@@ -215,7 +290,15 @@ mod tests {
             declaration.target.to_token_stream().to_string(),
             "Action :: Start"
         );
-        assert_eq!(declaration.context.to_token_stream().to_string(), "Docker");
+        assert_eq!(
+            declaration
+                .context
+                .as_ref()
+                .expect("контекст должен быть сохранён")
+                .to_token_stream()
+                .to_string(),
+            "Docker"
+        );
         assert_eq!(declaration.fields.len(), 1);
         assert_eq!(declaration.fields[0].ident, "base");
         assert_eq!(
@@ -343,5 +426,22 @@ mod tests {
         .expect("некорректная пометка должна давать ошибку");
 
         assert!(error.to_string().contains("no_save"));
+    }
+
+    #[test]
+    fn rejects_question_with_context() {
+        let error = parse(
+            quote!(target = Action::Start, context = Docker),
+            quote! {
+                struct Start {
+                    #[hill(ask = "Base", ctx)]
+                    base: Option<Base>,
+                }
+            },
+        )
+        .err()
+        .expect("вопрос вместе с контекстом должен давать ошибку");
+
+        assert!(error.to_string().contains("base"));
     }
 }

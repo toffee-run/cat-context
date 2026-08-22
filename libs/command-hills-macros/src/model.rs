@@ -5,7 +5,7 @@ pub(crate) struct Declaration {
     pub(crate) ident: Ident,
     pub(crate) generics: Generics,
     pub(crate) target: Path,
-    pub(crate) context: Path,
+    pub(crate) context: Option<Path>,
     pub(crate) clap_attributes: Vec<Attribute>,
     pub(crate) fields: Vec<Field>,
 }
@@ -17,6 +17,13 @@ pub(crate) struct Field {
     pub(crate) position: usize,
     pub(crate) clap_attributes: Vec<Attribute>,
     pub(crate) markers: Vec<Marker>,
+    pub(crate) question: Option<Question>,
+    pub(crate) with_context: bool,
+}
+
+pub(crate) enum Question {
+    Ask(syn::LitStr),
+    Keep(syn::LitStr),
 }
 
 pub(crate) struct Marker {
