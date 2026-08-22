@@ -90,6 +90,8 @@ mod tests {
     enum Base {
         Alpine,
         DebianSlim,
+        #[value(skip)]
+        Hidden,
     }
 
     impl fmt::Display for Base {
@@ -100,6 +102,7 @@ mod tests {
 
     #[test]
     fn choices_use_value_enum_names() {
+        let _hidden = Base::Hidden;
         let labels = variant_choices::<Base>()
             .iter()
             .map(ToString::to_string)

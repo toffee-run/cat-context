@@ -169,6 +169,13 @@ fn parse_hill(field: &SynField, field_ident: &syn::Ident) -> Result<(Option<Ques
         })?;
     }
 
+    if question.is_some() && with_context {
+        return Err(Error::new(
+            field_ident.span(),
+            format!("поле `{field_ident}` не может одновременно содержать вопрос и `ctx`"),
+        ));
+    }
+
     if question.is_some() && option_inner_type(&field.ty).is_none() {
         return Err(Error::new_spanned(
             &field.ty,
@@ -420,5 +427,22 @@ mod tests {
         .expect("некорректная пометка должна давать ошибку");
 
         assert!(error.to_string().contains("no_save"));
+    }
+
+    #[test]
+    fn rejects_question_with_context() {
+        let error = parse(
+            quote!(target = Action::Start, context = Docker),
+            quote! {
+                struct Start {
+                    #[hill(ask = "Base", ctx)]
+                    base: Option<Base>,
+                }
+            },
+        )
+        .err()
+        .expect("вопрос вместе с контекстом должен давать ошибку");
+
+        assert!(error.to_string().contains("base"));
     }
 }
