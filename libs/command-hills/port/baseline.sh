@@ -9,7 +9,11 @@ run_cmd() {
     local cmd=("$@")
     local output
     local status=0
-    output=$("$BIN" "${cmd[@]}" 2>&1) || status=$?
+    if command -v setsid >/dev/null 2>&1; then
+        output=$(setsid -w "$BIN" "${cmd[@]}" < /dev/null 2>&1) || status=$?
+    else
+        output=$("$BIN" "${cmd[@]}" < /dev/null 2>&1) || status=$?
+    fi
     local first_line
     first_line=$(echo "$output" | head -n 1)
     if [ -z "$first_line" ]; then
@@ -31,7 +35,7 @@ run_completion() {
     echo ""
     echo '```'
     local comp_out
-    comp_out=$(_CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX="$idx" COMPLETE=zsh "$BIN" -- cat-context "${cmd[@]}" 2>&1 || true)
+    comp_out=$(_CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX="$idx" COMPLETE=zsh "$BIN" -- cat-context "${cmd[@]}" < /dev/null 2>&1 || true)
     if [ -n "$comp_out" ]; then
         echo "$comp_out"
     fi
@@ -52,7 +56,7 @@ run_connect_completion() {
     echo ""
     echo '```'
     local comp_out
-    comp_out=$(_CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX="$idx" COMPLETE=zsh "$BIN" -- cat-context "${cmd[@]}" 2>&1 | grep -E '^(unix|npipe|tcp|http|https|ssh)\\://$' || true)
+    comp_out=$(_CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX="$idx" COMPLETE=zsh "$BIN" -- cat-context "${cmd[@]}" < /dev/null 2>&1 | grep -E '^(unix|npipe|tcp|http|https|ssh)\\://$' || true)
     if [ -n "$comp_out" ]; then
         echo "$comp_out"
     fi
@@ -74,7 +78,7 @@ run_file_completion() {
     echo ""
     echo '```'
     local comp_out
-    comp_out=$(cd "$fixture_dir" && _CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX=3 COMPLETE=zsh "$BIN" -- cat-context start --file "" 2>&1 || true)
+    comp_out=$(cd "$fixture_dir" && _CLAP_IFS=$'\n' _CLAP_COMPLETE_INDEX=3 COMPLETE=zsh "$BIN" -- cat-context start --file "" < /dev/null 2>&1 || true)
     if [ -n "$comp_out" ]; then
         echo "$comp_out"
     fi

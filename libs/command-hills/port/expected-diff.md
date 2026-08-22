@@ -8,12 +8,12 @@
 
 | Команда | Было (baseline.md) | Станет после порта | Причина |
 |---|---|---|---|
-| `cat-context start --file plan.txt` | `2` / `error: invalid value 'plan.txt' for '--file <FILE>': нужен .md файл: plan.txt` | `0` / `<empty>` | Требование 5: PathBuf не валидирует .md |
-| `cat-context restart --file plan.txt` | `2` / `error: invalid value 'plan.txt' for '--file <FILE>': нужен .md файл: plan.txt` | `0` / `<empty>` | Требование 5: PathBuf не валидирует .md |
+| `cat-context start --file plan.txt` | `2` / `error: invalid value 'plan.txt' for '--file <FILE>': нужен .md файл: plan.txt` | `1` / `The input device is not a TTY` | Валидация снята (требование 5): аргумент принимается clap, команда переходит к заполнению недостающих полей и останавливается на диалоге без TTY |
+| `cat-context restart --file plan.txt` | `2` / `error: invalid value 'plan.txt' for '--file <FILE>': нужен .md файл: plan.txt` | `1` / `The input device is not a TTY` | Валидация снята (требование 5): аргумент принимается clap, команда переходит к заполнению недостающих полей и останавливается на диалоге без TTY |
 
 ## Точные ожидаемые результаты
 
 ```expect
-cat-context start --file plan.txt | 0 | <empty>
-cat-context restart --file plan.txt | 0 | <empty>
+cat-context start --file plan.txt | 1 | The input device is not a TTY
+cat-context restart --file plan.txt | 1 | The input device is not a TTY
 ```
