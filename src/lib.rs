@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use bollard::Docker;
 use clap::ValueEnum;
+use clap_complete::engine::ArgValueCompleter;
 use inquire::InquireError;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, ValueEnum)]
@@ -34,23 +35,58 @@ pub enum Prompt {
     None,
 }
 
+#[command_hills::commands(context = Docker)]
 #[derive(Debug)]
 pub enum Action {
+    #[hill(about = "запустить новый контейнер")]
     Start {
+        #[hill(ask = "Базовый образ", arg(long, value_enum, value_name = "BASE"))]
         base: Base,
+        #[hill(ask = "Агент", arg(long, value_enum, value_name = "AGENT"))]
         agent: Agent,
+        #[hill(args = cli::PromptArgs)]
         prompt: Prompt,
     },
+    #[hill(about = "пересоздать контейнер")]
     Restart {
+        #[hill(
+            with = cli::restart_container,
+            arg(
+                long,
+                value_name = "NAME",
+                add = ArgValueCompleter::new(complete::containers)
+            )
+        )]
         container: String,
+        #[hill(keep = "Базовый образ", arg(long, value_enum, value_name = "BASE"))]
         base: Option<Base>,
+        #[hill(args = cli::PromptArgs)]
         prompt: Option<Prompt>,
+        #[hill(args = cli::SaveArgs)]
         save: bool,
     },
+    #[hill(about = "остановить контейнер")]
     Stop {
+        #[hill(
+            with = cli::stop_container,
+            arg(
+                long,
+                value_name = "NAME",
+                add = ArgValueCompleter::new(complete::containers)
+            )
+        )]
         container: String,
     },
+    #[hill(about = "удалить контейнер")]
     Delete {
+        #[hill(
+            with = cli::delete_container,
+            arg(
+                long,
+                value_name = "NAME",
+                add = ArgValueCompleter::new(complete::containers)
+            )
+        )]
         container: String,
     },
 }

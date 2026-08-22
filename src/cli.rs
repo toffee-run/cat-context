@@ -1,14 +1,15 @@
 use std::path::{Path, PathBuf};
 
 use bollard::Docker;
-use clap::{Args, CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
 use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter, PathCompleter};
+use command_hills::{Resolve, Result};
 
 use crate::ask;
-use crate::{Action, Agent, Base, Command, Prompt, complete};
+use crate::{ActionArgs, Command, Prompt, complete, fill};
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(name = "cat-context", version)]
 struct Cli {
     #[arg(
@@ -25,78 +26,90 @@ struct Cli {
     action: Option<ActionArgs>,
 }
 
-#[derive(Subcommand, Debug)]
-enum ActionArgs {
-    #[command(about = "запустить новый контейнер")]
-    Start(StartArgs),
-    #[command(about = "пересоздать контейнер")]
-    Restart(RestartArgs),
-    #[command(about = "остановить контейнер")]
-    Stop(TargetArgs),
-    #[command(about = "удалить контейнер")]
-    Delete(TargetArgs),
-}
-
-#[derive(Args, Debug, Default)]
-struct StartArgs {
-    #[arg(long, value_enum, value_name = "BASE")]
-    base: Option<Base>,
-
-    #[arg(long, value_enum, value_name = "AGENT")]
-    agent: Option<Agent>,
-
-    #[command(flatten)]
-    prompt: PromptArgs,
-}
-
-#[derive(Args, Debug, Default)]
-struct RestartArgs {
-    #[command(flatten)]
-    target: TargetArgs,
-
-    #[arg(long, value_enum, value_name = "BASE")]
-    base: Option<Base>,
-
-    #[command(flatten)]
-    prompt: PromptArgs,
-
-    #[arg(long)]
-    save: bool,
-
-    #[arg(long, conflicts_with = "save")]
-    no_save: bool,
-}
-
-#[derive(Args, Debug, Default)]
-struct TargetArgs {
-    #[arg(
-        long,
-        value_name = "NAME",
-        add = ArgValueCompleter::new(complete::containers),
-    )]
-    container: Option<String>,
-}
-
-#[derive(Args, Debug, Default)]
+#[derive(clap::Args, Debug, Default)]
 #[group(multiple = false)]
-struct PromptArgs {
+pub struct PromptArgs {
     #[arg(
         long,
         value_name = "FILE",
         add = ArgValueCompleter::new(PathCompleter::any().filter(is_visitable)),
     )]
-    file: Option<PathBuf>,
+    pub file: Option<PathBuf>,
 
     #[arg(long, value_name = "TEXT")]
-    text: Option<String>,
+    pub text: Option<String>,
 
     #[arg(long)]
-    no_prompt: bool,
+    pub no_prompt: bool,
+}
+
+impl Resolve<Prompt> for PromptArgs {
+    fn resolve(self) -> Result<Prompt> {
+        if let Some(file) = self.file {
+            return Ok(Prompt::File(file));
+        }
+        if let Some(text) = self.text {
+            return Ok(Prompt::Text(text));
+        }
+        if self.no_prompt {
+            return Ok(Prompt::None);
+        }
+        ask::prompt()
+    }
+}
+
+impl Resolve<Option<Prompt>> for PromptArgs {
+    fn resolve(self) -> Result<Option<Prompt>> {
+        if let Some(file) = self.file {
+            return Ok(Some(Prompt::File(file)));
+        }
+        if let Some(text) = self.text {
+            return Ok(Some(Prompt::Text(text)));
+        }
+        if self.no_prompt {
+            return Ok(Some(Prompt::None));
+        }
+        ask::prompt_or_keep()
+    }
+}
+
+#[derive(clap::Args, Debug, Default)]
+pub struct SaveArgs {
+    #[arg(long)]
+    pub save: bool,
+
+    #[arg(long, conflicts_with = "save")]
+    pub no_save: bool,
+}
+
+impl Resolve<bool> for SaveArgs {
+    fn resolve(self) -> Result<bool> {
+        if self.save {
+            return Ok(true);
+        }
+        if self.no_save {
+            return Ok(false);
+        }
+        ask::save()
+    }
+}
+
+pub async fn stop_container(given: Option<String>, docker: &Docker) -> Result<String> {
+    ask::container(docker, given, "Какой контейнер остановить?").await
+}
+
+pub async fn delete_container(given: Option<String>, docker: &Docker) -> Result<String> {
+    ask::container(docker, given, "Какой контейнер удалить?").await
+}
+
+pub async fn restart_container(given: Option<String>, docker: &Docker) -> Result<String> {
+    ask::container(docker, given, "Какой контейнер пересоздать?").await
 }
 
 #[cfg(test)]
 mod argument_tests {
     use super::*;
+    use crate::{Agent, Base};
 
     fn action_of(args: &[&str]) -> ActionArgs {
         Cli::try_parse_from(args)
@@ -156,10 +169,10 @@ mod argument_tests {
             panic!("ожидался restart");
         };
 
-        assert_eq!(args.target.container.as_deref(), Some("cat-arch-codex"));
+        assert_eq!(args.container.as_deref(), Some("cat-arch-codex"));
         assert_eq!(args.base, Some(Base::Debian));
-        assert!(args.save);
-        assert!(!args.no_save);
+        assert!(args.save.save);
+        assert!(!args.save.no_save);
     }
 
     #[test]
@@ -230,27 +243,12 @@ mod argument_tests {
     }
 }
 
-impl PromptArgs {
-    fn into_prompt(self) -> Option<Prompt> {
-        if let Some(path) = self.file {
-            return Some(Prompt::File(path));
-        }
-        if let Some(text) = self.text {
-            return Some(Prompt::Text(text));
-        }
-        if self.no_prompt {
-            return Some(Prompt::None);
-        }
-        None
-    }
-}
-
 #[cfg(test)]
-mod into_prompt_tests {
+mod resolve_prompt_tests {
     use super::*;
 
     #[test]
-    fn prompt_arguments_turn_into_a_prompt() {
+    fn explicit_prompt_arguments_resolve_into_prompt() {
         let file = PromptArgs {
             file: Some(PathBuf::from("plan.md")),
             ..PromptArgs::default()
@@ -264,10 +262,67 @@ mod into_prompt_tests {
             ..PromptArgs::default()
         };
 
-        assert!(matches!(file.into_prompt(), Some(Prompt::File(_))));
-        assert!(matches!(text.into_prompt(), Some(Prompt::Text(_))));
-        assert!(matches!(empty.into_prompt(), Some(Prompt::None)));
-        assert!(PromptArgs::default().into_prompt().is_none());
+        assert!(matches!(
+            Resolve::<Prompt>::resolve(file),
+            Ok(Prompt::File(_))
+        ));
+        assert!(matches!(
+            Resolve::<Prompt>::resolve(text),
+            Ok(Prompt::Text(_))
+        ));
+        assert!(matches!(
+            Resolve::<Prompt>::resolve(empty),
+            Ok(Prompt::None)
+        ));
+    }
+
+    #[test]
+    fn explicit_prompt_arguments_resolve_into_optional_prompt() {
+        let file = PromptArgs {
+            file: Some(PathBuf::from("plan.md")),
+            ..PromptArgs::default()
+        };
+        let text = PromptArgs {
+            text: Some("привет".to_owned()),
+            ..PromptArgs::default()
+        };
+        let empty = PromptArgs {
+            no_prompt: true,
+            ..PromptArgs::default()
+        };
+
+        assert!(matches!(
+            Resolve::<Option<Prompt>>::resolve(file),
+            Ok(Some(Prompt::File(_)))
+        ));
+        assert!(matches!(
+            Resolve::<Option<Prompt>>::resolve(text),
+            Ok(Some(Prompt::Text(_)))
+        ));
+        assert!(matches!(
+            Resolve::<Option<Prompt>>::resolve(empty),
+            Ok(Some(Prompt::None))
+        ));
+    }
+}
+
+#[cfg(test)]
+mod resolve_save_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_save_arguments_resolve_into_bool() {
+        let save = SaveArgs {
+            save: true,
+            no_save: false,
+        };
+        let no_save = SaveArgs {
+            save: false,
+            no_save: true,
+        };
+
+        assert!(Resolve::<bool>::resolve(save).unwrap());
+        assert!(!Resolve::<bool>::resolve(no_save).unwrap());
     }
 }
 
@@ -312,19 +367,11 @@ mod endpoint_tests {
     }
 }
 
-async fn fill(args: ActionArgs, docker: &Docker) -> ask::Result<Action> {
-    match args {
-        ActionArgs::Start(args) => start(args),
-        ActionArgs::Restart(args) => restart(args, docker).await,
-        ActionArgs::Stop(args) => stop(args, docker).await,
-        ActionArgs::Delete(args) => delete(args, docker).await,
-    }
-}
-
 #[cfg(test)]
 mod fill_tests {
     use super::fixtures::offline_docker;
     use super::*;
+    use crate::{Action, Agent, Base};
 
     async fn action_from(args: &[&str]) -> Action {
         let action = Cli::try_parse_from(args)
@@ -383,7 +430,7 @@ mod fill_tests {
             panic!("ожидался Start");
         };
 
-        assert!(matches!(prompt, Prompt::File(path) if path == PathBuf::from("plan.md")));
+        assert!(matches!(prompt, Prompt::File(path) if path == Path::new("plan.md")));
     }
 
     #[tokio::test]
@@ -454,16 +501,6 @@ mod fill_tests {
     }
 }
 
-async fn stop(args: TargetArgs, docker: &Docker) -> ask::Result<Action> {
-    let container = ask::container(docker, args.container, "Какой контейнер остановить?").await?;
-    Ok(Action::Stop { container })
-}
-
-async fn delete(args: TargetArgs, docker: &Docker) -> ask::Result<Action> {
-    let container = ask::container(docker, args.container, "Какой контейнер удалить?").await?;
-    Ok(Action::Delete { container })
-}
-
 fn ask_action() -> ask::Result<ActionArgs> {
     let chosen = ask::action(action_choices())?;
 
@@ -517,77 +554,6 @@ mod action_choices_tests {
 
             assert!(parsed.is_ok(), "{}", choice.name);
         }
-    }
-}
-
-fn start(args: StartArgs) -> ask::Result<Action> {
-    let base = ask::variant("Базовый образ", args.base)?;
-    let agent = ask::variant("Агент", args.agent)?;
-
-    let prompt = match args.prompt.into_prompt() {
-        Some(prompt) => prompt,
-        None => ask::prompt()?,
-    };
-
-    Ok(Action::Start {
-        base,
-        agent,
-        prompt,
-    })
-}
-
-async fn restart(args: RestartArgs, docker: &Docker) -> ask::Result<Action> {
-    let RestartArgs {
-        target,
-        base,
-        prompt,
-        save,
-        no_save,
-    } = args;
-
-    let container =
-        ask::container(docker, target.container, "Какой контейнер пересоздать?").await?;
-    let base = ask::variant_or_keep("Базовый образ", base)?;
-
-    let prompt = match prompt.into_prompt() {
-        Some(prompt) => Some(prompt),
-        None => ask::prompt_or_keep()?,
-    };
-
-    let save = match save_flag(save, no_save) {
-        Some(save) => save,
-        None => ask::save()?,
-    };
-
-    Ok(Action::Restart {
-        container,
-        base,
-        prompt,
-        save,
-    })
-}
-
-fn save_flag(save: bool, no_save: bool) -> Option<bool> {
-    if save {
-        return Some(true);
-    }
-
-    if no_save {
-        return Some(false);
-    }
-
-    None
-}
-
-#[cfg(test)]
-mod save_flag_tests {
-    use super::*;
-
-    #[test]
-    fn save_flag_needs_an_explicit_choice() {
-        assert_eq!(save_flag(true, false), Some(true));
-        assert_eq!(save_flag(false, true), Some(false));
-        assert_eq!(save_flag(false, false), None);
     }
 }
 
