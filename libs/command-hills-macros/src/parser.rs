@@ -6,27 +6,22 @@ use syn::{
     PathArguments, Result, Token, Type,
 };
 
-use crate::model::{Declaration, Field, Marker, Question};
+use crate::model::{Declaration, Destination, Field, Marker, Question};
 
 const CLAP_ATTRIBUTES: &[&str] = &["arg", "command"];
 const EXCEPTION_MARKERS: &[&str] = &["Only"];
 
 pub(crate) fn parse_declaration(arguments: TokenStream, input: TokenStream) -> Result<Declaration> {
     let item = syn::parse2::<ItemStruct>(input)?;
-    let options = syn::parse2::<Options>(arguments)?;
-    let target = options.target.ok_or_else(|| {
-        Error::new(
-            item.ident.span(),
-            format!("для структуры `{}` не указан целевой тип", item.ident),
-        )
-    })?;
+    let mut options = syn::parse2::<Options>(arguments)?;
+    let destination = options.destination(&item)?;
     let fields = parse_fields(&item)?;
 
     Ok(Declaration {
         visibility: item.vis,
         ident: item.ident,
         generics: item.generics,
-        target,
+        destination,
         context: options.context,
         clap_attributes: clap_attributes(&item.attrs),
         fields,
@@ -36,7 +31,42 @@ pub(crate) fn parse_declaration(arguments: TokenStream, input: TokenStream) -> R
 #[derive(Default)]
 struct Options {
     target: Option<syn::Path>,
+    variant: Option<syn::Path>,
     context: Option<syn::Path>,
+}
+
+impl Options {
+    fn destination(&mut self, item: &ItemStruct) -> Result<Destination> {
+        if let Some(initializer) = self.target.take() {
+            return Ok(Destination {
+                result: initializer.clone(),
+                initializer,
+            });
+        }
+        let initializer = self.variant.take().ok_or_else(|| {
+            Error::new(
+                item.ident.span(),
+                format!(
+                    "для структуры `{}` не указан целевой тип: target или variant",
+                    item.ident
+                ),
+            )
+        })?;
+        let mut result = initializer.clone();
+        result.segments.pop();
+        result.segments.pop_punct();
+        if result.segments.is_empty() {
+            return Err(Error::new_spanned(
+                initializer,
+                "значение параметра `variant` должно содержать тип перечисления и вариант",
+            ));
+        }
+
+        Ok(Destination {
+            initializer,
+            result,
+        })
+    }
 }
 
 impl syn::parse::Parse for Options {
@@ -62,7 +92,18 @@ impl syn::parse::Parse for Options {
             };
 
             match name.to_string().as_str() {
-                "target" => set_once(&mut options.target, path.path, name)?,
+                "target" => {
+                    if options.variant.is_some() {
+                        return Err(conflicting_destination(name));
+                    }
+                    set_once(&mut options.target, path.path, name)?;
+                }
+                "variant" => {
+                    if options.target.is_some() {
+                        return Err(conflicting_destination(name));
+                    }
+                    set_once(&mut options.variant, path.path, name)?;
+                }
                 "context" => set_once(&mut options.context, path.path, name)?,
                 _ => {
                     return Err(Error::new(
@@ -75,6 +116,13 @@ impl syn::parse::Parse for Options {
 
         Ok(options)
     }
+}
+
+fn conflicting_destination(name: &syn::Ident) -> Error {
+    Error::new(
+        name.span(),
+        format!("параметр `{name}` нельзя указывать вместе с другим целевым параметром"),
+    )
 }
 
 fn set_once(slot: &mut Option<syn::Path>, value: syn::Path, name: &syn::Ident) -> Result<()> {
@@ -287,7 +335,11 @@ mod tests {
 
         assert_eq!(declaration.ident, "Start");
         assert_eq!(
-            declaration.target.to_token_stream().to_string(),
+            declaration
+                .destination
+                .initializer
+                .to_token_stream()
+                .to_string(),
             "Action :: Start"
         );
         assert_eq!(
@@ -410,6 +462,64 @@ mod tests {
 
         assert!(error.to_string().contains("Restart"));
         assert!(error.to_string().contains("целевой тип"));
+    }
+
+    #[test]
+    fn parses_enum_variant_destination() {
+        let declaration = parse(
+            quote!(variant = Action::Restart),
+            quote!(
+                struct Restart {
+                    base: Option<Base>,
+                }
+            ),
+        )
+        .expect("вариант перечисления должен разбираться");
+
+        assert_eq!(
+            declaration
+                .destination
+                .initializer
+                .to_token_stream()
+                .to_string(),
+            "Action :: Restart"
+        );
+        assert_eq!(
+            declaration.destination.result.to_token_stream().to_string(),
+            "Action"
+        );
+    }
+
+    #[test]
+    fn rejects_target_followed_by_variant() {
+        let error = parse(
+            quote!(target = Target, variant = Action::Restart),
+            quote!(
+                struct Restart {
+                    base: Option<Base>,
+                }
+            ),
+        )
+        .err()
+        .expect("второй целевой параметр должен давать ошибку");
+
+        assert!(error.to_string().contains("variant"));
+    }
+
+    #[test]
+    fn rejects_variant_followed_by_target() {
+        let error = parse(
+            quote!(variant = Action::Restart, target = Target),
+            quote!(
+                struct Restart {
+                    base: Option<Base>,
+                }
+            ),
+        )
+        .err()
+        .expect("второй целевой параметр должен давать ошибку");
+
+        assert!(error.to_string().contains("target"));
     }
 
     #[test]

@@ -9,7 +9,8 @@ pub(crate) fn generate(declaration: Declaration) -> Result<TokenStream> {
     let visibility = &declaration.visibility;
     let ident = &declaration.ident;
     let generics = &declaration.generics;
-    let target = &declaration.target;
+    let initializer = &declaration.destination.initializer;
+    let result = &declaration.destination.result;
     let context = &declaration.context;
     let struct_attributes = &declaration.clap_attributes;
     let mut fields = declaration.fields.iter().collect::<Vec<_>>();
@@ -23,15 +24,15 @@ pub(crate) fn generate(declaration: Declaration) -> Result<TokenStream> {
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
     let resolve = match context {
         Some(context) => quote! {
-            pub async fn resolve(self, ctx: &#context) -> ::command_hills::Result<#target> {
-                Ok(#target {
+            pub async fn resolve(self, ctx: &#context) -> ::command_hills::Result<#result> {
+                Ok(#initializer {
                     #(#resolved_fields,)*
                 })
             }
         },
         None => quote! {
-            pub fn resolve(self) -> ::command_hills::Result<#target> {
-                Ok(#target {
+            pub fn resolve(self) -> ::command_hills::Result<#result> {
+                Ok(#initializer {
                     #(#resolved_fields,)*
                 })
             }
