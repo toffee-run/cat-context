@@ -175,7 +175,6 @@ fn parse_hill(field: &SynField, field_ident: &syn::Ident) -> Result<(Option<Ques
             format!("поле `{field_ident}` не может одновременно содержать вопрос и `ctx`"),
         ));
     }
-
     if question.is_some() && option_inner_type(&field.ty).is_none() {
         return Err(Error::new_spanned(
             &field.ty,
