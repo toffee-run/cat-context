@@ -161,7 +161,7 @@ fn parse_field(field: &SynField, position: usize) -> Result<Field> {
         .clone()
         .ok_or_else(|| Error::new(field.ty.span(), "ожидалось именованное поле"))?;
     let markers = parse_markers(field, &ident)?;
-    let (question, with_context) = parse_hill(field, &ident)?;
+    let (question, with_context, resolver) = parse_hill(field, &ident)?;
 
     Ok(Field {
         visibility: field.vis.clone(),
@@ -172,12 +172,17 @@ fn parse_field(field: &SynField, position: usize) -> Result<Field> {
         markers,
         question,
         with_context,
+        resolver,
     })
 }
 
-fn parse_hill(field: &SynField, field_ident: &syn::Ident) -> Result<(Option<Question>, bool)> {
+fn parse_hill(
+    field: &SynField,
+    field_ident: &syn::Ident,
+) -> Result<(Option<Question>, bool, Option<syn::Path>)> {
     let mut question = None;
     let mut with_context = false;
+    let mut resolver = None;
 
     for attribute in field
         .attrs
@@ -192,6 +197,15 @@ fn parse_hill(field: &SynField, field_ident: &syn::Ident) -> Result<(Option<Ques
                     )));
                 }
                 with_context = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("with") {
+                if resolver.is_some() {
+                    return Err(meta.error(format!(
+                        "пометка `with` поля `{field_ident}` указана несколько раз"
+                    )));
+                }
+                resolver = Some(meta.value()?.parse::<syn::Path>()?);
                 return Ok(());
             }
 
@@ -223,6 +237,12 @@ fn parse_hill(field: &SynField, field_ident: &syn::Ident) -> Result<(Option<Ques
             format!("поле `{field_ident}` не может одновременно содержать вопрос и `ctx`"),
         ));
     }
+    if resolver.is_some() && (question.is_some() || with_context) {
+        return Err(Error::new(
+            field_ident.span(),
+            format!("поле `{field_ident}` не может сочетать `with` с вопросом или `ctx`"),
+        ));
+    }
     if question.is_some() && option_inner_type(&field.ty).is_none() {
         return Err(Error::new_spanned(
             &field.ty,
@@ -230,7 +250,7 @@ fn parse_hill(field: &SynField, field_ident: &syn::Ident) -> Result<(Option<Ques
         ));
     }
 
-    Ok((question, with_context))
+    Ok((question, with_context, resolver))
 }
 
 fn option_inner_type(ty: &Type) -> Option<&Type> {
@@ -553,5 +573,29 @@ mod tests {
         .expect("вопрос вместе с контекстом должен давать ошибку");
 
         assert!(error.to_string().contains("base"));
+    }
+
+    #[test]
+    fn parses_resolver_path() {
+        let declaration = parse(
+            quote!(target = Action::Stop, context = Docker),
+            quote! {
+                struct Stop {
+                    #[hill(with = ask::stop_container)]
+                    container: Option<String>,
+                }
+            },
+        )
+        .expect("путь резолвера должен разбираться");
+
+        assert_eq!(
+            declaration.fields[0]
+                .resolver
+                .as_ref()
+                .expect("резолвер должен быть сохранён")
+                .to_token_stream()
+                .to_string(),
+            "ask :: stop_container"
+        );
     }
 }
