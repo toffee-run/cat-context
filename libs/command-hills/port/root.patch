@@ -1,0 +1,211 @@
+diff --git a/src/ask.rs b/src/ask.rs
+index e3d09da..f470cb6 100644
+--- a/src/ask.rs
++++ b/src/ask.rs
+@@ -40,11 +40,6 @@ mod choice_tests {
+     }
+ }
+ 
+-pub fn action(choices: Vec<Choice>) -> Result<String> {
+-    let chosen = Select::new("Что сделать?", choices).prompt()?;
+-    Ok(chosen.name)
+-}
+-
+ pub fn variant<T>(message: &str, given: Option<T>) -> Result<T>
+ where
+     T: ValueEnum + Clone + fmt::Display + 'static,
+diff --git a/src/cli.rs b/src/cli.rs
+index 50e9297..371bf2d 100644
+--- a/src/cli.rs
++++ b/src/cli.rs
+@@ -1,30 +1,13 @@
+ use std::path::{Path, PathBuf};
+ 
+ use bollard::Docker;
+-use clap::{CommandFactory, Parser};
++use clap::CommandFactory;
+ use clap_complete::CompleteEnv;
+-use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter, PathCompleter};
++use clap_complete::engine::{ArgValueCompleter, PathCompleter};
+ use command_hills::{Resolve, Result};
+ 
++use crate::Prompt;
+ use crate::ask;
+-use crate::{ActionArgs, Command, Prompt, complete, fill};
+-
+-#[derive(Parser)]
+-#[command(name = "cat-context", version)]
+-struct Cli {
+-    #[arg(
+-        long,
+-        global = true,
+-        env = "DOCKER_HOST",
+-        value_name = "URL",
+-        value_parser = Docker::connect_with_host,
+-        add = ArgValueCandidates::new(complete::endpoints),
+-    )]
+-    connect: Option<Docker>,
+-
+-    #[command(subcommand)]
+-    action: Option<ActionArgs>,
+-}
+ 
+ #[derive(clap::Args, Debug, Default)]
+ #[group(multiple = false)]
+@@ -101,7 +84,8 @@ pub async fn container(given: Option<String>, docker: &Docker, message: &str) ->
+ #[cfg(test)]
+ mod argument_tests {
+     use super::*;
+-    use crate::{Agent, Base};
++    use crate::{ActionArgs, Agent, Base, Cli};
++    use clap::Parser;
+ 
+     fn action_of(args: &[&str]) -> ActionArgs {
+         Cli::try_parse_from(args)
+@@ -319,24 +303,10 @@ mod resolve_save_tests {
+ }
+ 
+ pub fn complete() {
+-    CompleteEnv::with_factory(Cli::command).complete();
+-}
+-
+-pub async fn command() -> ask::Result<Command> {
+-    let cli = Cli::parse();
+-
+-    let connect = endpoint(cli.connect);
+-
+-    let args = match cli.action {
+-        Some(args) => args,
+-        None => ask_action()?,
+-    };
+-
+-    let action = fill(args, &connect).await?;
+-    Ok(Command { connect, action })
++    CompleteEnv::with_factory(crate::Cli::command).complete();
+ }
+ 
+-fn endpoint(given: Option<Docker>) -> Docker {
++pub fn endpoint(given: Option<Docker>) -> Docker {
+     match given {
+         Some(docker) => docker,
+         None => Docker::connect_with_defaults().expect("подключение по умолчанию"),
+@@ -363,7 +333,8 @@ mod endpoint_tests {
+ mod fill_tests {
+     use super::fixtures::offline_docker;
+     use super::*;
+-    use crate::{Action, Agent, Base};
++    use crate::{Action, Agent, Base, Cli, fill};
++    use clap::Parser;
+ 
+     async fn action_from(args: &[&str]) -> Action {
+         let action = Cli::try_parse_from(args)
+@@ -493,62 +464,6 @@ mod fill_tests {
+     }
+ }
+ 
+-fn ask_action() -> ask::Result<ActionArgs> {
+-    let chosen = ask::action(action_choices())?;
+-
+-    let args = Cli::try_parse_from(["cat-context", &chosen])
+-        .expect("подкоманда без аргументов разбирается")
+-        .action
+-        .expect("подкоманда названа");
+-
+-    Ok(args)
+-}
+-
+-fn action_choices() -> Vec<ask::Choice> {
+-    Cli::command()
+-        .get_subcommands()
+-        .map(|command| ask::Choice {
+-            name: command.get_name().to_owned(),
+-            label: match command.get_about() {
+-                Some(about) => about.to_string(),
+-                None => command.get_name().to_owned(),
+-            },
+-        })
+-        .collect()
+-}
+-
+-#[cfg(test)]
+-mod action_choices_tests {
+-    use super::*;
+-
+-    #[test]
+-    fn every_subcommand_becomes_a_menu_item() {
+-        let choices = action_choices();
+-        let names: Vec<&str> = choices.iter().map(|choice| choice.name.as_str()).collect();
+-        let labels: Vec<&str> = choices.iter().map(|choice| choice.label.as_str()).collect();
+-
+-        assert_eq!(names, vec!["start", "restart", "stop", "delete"]);
+-        assert_eq!(
+-            labels,
+-            vec![
+-                "запустить новый контейнер",
+-                "пересоздать контейнер",
+-                "остановить контейнер",
+-                "удалить контейнер"
+-            ]
+-        );
+-    }
+-
+-    #[test]
+-    fn a_chosen_name_parses_into_empty_arguments() {
+-        for choice in action_choices() {
+-            let parsed = Cli::try_parse_from(["cat-context", &choice.name]);
+-
+-            assert!(parsed.is_ok(), "{}", choice.name);
+-        }
+-    }
+-}
+-
+ pub fn is_markdown(path: &Path) -> bool {
+     match path.extension() {
+         Some(extension) => extension.eq_ignore_ascii_case("md"),
+diff --git a/src/lib.rs b/src/lib.rs
+index 45c3e25..ccc2f42 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -8,7 +8,7 @@ use std::path::PathBuf;
+ 
+ use bollard::Docker;
+ use clap::ValueEnum;
+-use clap_complete::engine::ArgValueCompleter;
++use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter};
+ use inquire::InquireError;
+ 
+ #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, ValueEnum)]
+@@ -94,9 +94,23 @@ pub enum Action {
+     },
+ }
+ 
++#[command_hills::root(action = Action, ask = "Что сделать?")]
++#[command(name = "cat-context", version)]
++#[derive(Debug)]
+ pub struct Command {
++    #[hill(
++        context,
++        with = cli::endpoint,
++        arg(
++            long,
++            global = true,
++            env = "DOCKER_HOST",
++            value_name = "URL",
++            value_parser = Docker::connect_with_host,
++            add = ArgValueCandidates::new(complete::endpoints)
++        )
++    )]
+     pub connect: Docker,
+-    pub action: Action,
+ }
+ 
+ impl fmt::Display for Base {
+@@ -114,7 +128,7 @@ impl fmt::Display for Agent {
+ }
+ 
+ pub async fn run() -> u8 {
+-    exit_code(cli::command().await)
++    exit_code(Command::parse().await)
+ }
+ 
+ pub fn exit_code(result: ask::Result<Command>) -> u8 {
