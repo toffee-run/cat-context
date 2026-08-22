@@ -83,7 +83,6 @@ struct PromptArgs {
     #[arg(
         long,
         value_name = "FILE",
-        value_parser = markdown_path,
         add = ArgValueCompleter::new(PathCompleter::any().filter(is_visitable)),
     )]
     file: Option<PathBuf>,
@@ -211,8 +210,8 @@ mod argument_tests {
     }
 
     #[test]
-    fn file_argument_takes_markdown_only() {
-        assert!(rejects(&["cat-context", "start", "--file", "notes.txt"]));
+    fn file_argument_accepts_any_path() {
+        assert!(!rejects(&["cat-context", "start", "--file", "notes.txt"]));
         assert!(!rejects(&["cat-context", "start", "--file", "notes.md"]));
     }
 
@@ -589,16 +588,6 @@ mod save_flag_tests {
         assert_eq!(save_flag(true, false), Some(true));
         assert_eq!(save_flag(false, true), Some(false));
         assert_eq!(save_flag(false, false), None);
-    }
-}
-
-pub fn markdown_path(value: &str) -> Result<PathBuf, String> {
-    let path = PathBuf::from(value);
-
-    if is_markdown(&path) {
-        Ok(path)
-    } else {
-        Err(format!("нужен .md файл: {value}"))
     }
 }
 

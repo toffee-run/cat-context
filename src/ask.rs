@@ -5,10 +5,9 @@ use std::path::PathBuf;
 use bollard::Docker;
 use clap::ValueEnum;
 use inquire::autocompletion::{Autocomplete, Replacement};
-use inquire::validator::Validation;
 use inquire::{Confirm, CustomUserError, InquireError, Select, Text};
 
-use crate::cli::{is_markdown, markdown_path};
+use crate::cli::is_markdown;
 use crate::{Prompt, docker};
 
 pub type Result<T> = std::result::Result<T, InquireError>;
@@ -134,7 +133,6 @@ mod prompt_source_tests {
 fn ask_file() -> Result<Prompt> {
     let path = Text::new("Файл с промптом")
         .with_autocomplete(MarkdownPaths)
-        .with_validator(validate_markdown)
         .prompt()?;
 
     Ok(Prompt::File(PathBuf::from(path)))
@@ -143,30 +141,6 @@ fn ask_file() -> Result<Prompt> {
 fn ask_text() -> Result<Prompt> {
     let text = Text::new("Текст промпта").prompt()?;
     Ok(Prompt::Text(text))
-}
-
-fn validate_markdown(input: &str) -> std::result::Result<Validation, CustomUserError> {
-    match markdown_path(input) {
-        Ok(_) => Ok(Validation::Valid),
-        Err(message) => Ok(Validation::Invalid(message.into())),
-    }
-}
-
-#[cfg(test)]
-mod validate_markdown_tests {
-    use super::*;
-
-    #[test]
-    fn markdown_validation_reports_the_extension() {
-        assert!(matches!(
-            validate_markdown("plan.md"),
-            Ok(Validation::Valid)
-        ));
-        assert!(matches!(
-            validate_markdown("plan.txt"),
-            Ok(Validation::Invalid(_))
-        ));
-    }
 }
 
 enum Change<T> {
