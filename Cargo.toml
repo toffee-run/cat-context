@@ -1,5 +1,6 @@
 [workspace]
 members = ["libs/command-hills", "libs/command-hills-macros"]
+default-members = [".", "libs/command-hills", "libs/command-hills-macros"]
 
 [package]
 name = "cat-context"
