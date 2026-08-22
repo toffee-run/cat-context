@@ -4,7 +4,8 @@ use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    Attribute, Error, Expr, Fields, ItemEnum, LitStr, Meta, Path, Result, Token, parenthesized,
+    Attribute, Error, Expr, Fields, ItemEnum, LitStr, Meta, Path, Result, Token, Type,
+    parenthesized,
 };
 
 use crate::model::{Declaration, Destination, Field, Question};
@@ -44,11 +45,12 @@ pub(crate) fn expand(arguments: TokenStream, input: TokenStream) -> Result<Token
                 .ok_or_else(|| Error::new(field.ty.span(), "ожидалось именованное поле"))?;
             let parsed = parse_command_field(field, &ident)?;
             let ty = field.ty.clone();
-            let argument_ty = match (&parsed.resolver, &parsed.question) {
-                (Some(_), None) | (None, Some(Question::Ask(_))) => {
+            let argument_ty = match (&parsed.arguments, &parsed.resolver, &parsed.question) {
+                (Some(arguments), None, None) => arguments.clone(),
+                (None, Some(_), None) | (None, None, Some(Question::Ask(_))) => {
                     syn::parse2(quote_spanned!(ty.span()=> Option<#ty>))?
                 }
-                (None, Some(Question::Keep(_))) => {
+                (None, None, Some(Question::Keep(_))) => {
                     if crate::parser::option_inner_type(&ty).is_none() {
                         return Err(Error::new_spanned(
                             &ty,
@@ -57,29 +59,37 @@ pub(crate) fn expand(arguments: TokenStream, input: TokenStream) -> Result<Token
                     }
                     ty
                 }
-                (None, None) if crate::parser::option_inner_type(&ty).is_some() => ty,
-                (None, None) => {
+                (None, None, None) if crate::parser::option_inner_type(&ty).is_some() => ty,
+                (None, None, None) => {
                     return Err(Error::new(
                         ident.span(),
-                        format!("поле `{ident}` должно содержать пометку `ask`, `keep` или `with`"),
+                        format!(
+                            "поле `{ident}` должно содержать пометку `ask`, `keep`, `with` или `args`"
+                        ),
                     ));
                 }
-                (Some(_), Some(_)) => {
+                _ => {
                     return Err(Error::new(
                         ident.span(),
-                        format!("поле `{ident}` не может сочетать `with` с вопросом"),
+                        format!("поле `{ident}` содержит конфликтующие пометки"),
                     ));
                 }
             };
+            let mut clap_attributes = parsed.clap_attributes;
+            if parsed.arguments.is_some() {
+                clap_attributes.extend(Attribute::parse_outer.parse2(quote_spanned! {
+                    ident.span()=> #[command(flatten)]
+                })?);
+            }
             generated_fields.push(Field {
                 visibility: field.vis.clone(),
                 ident,
                 ty: argument_ty,
                 position,
-                clap_attributes: parsed.clap_attributes,
+                clap_attributes,
                 markers: Vec::new(),
                 question: parsed.question,
-                with_context: false,
+                with_context: parsed.with_context,
                 resolver: parsed.resolver,
             });
             field
@@ -213,6 +223,8 @@ fn parse_about(attributes: &[Attribute], variant: &syn::Ident) -> Result<LitStr>
 fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<CommandField> {
     let mut resolver = None;
     let mut question = None;
+    let mut arguments = None;
+    let mut with_context = false;
     let mut clap_attributes = Vec::new();
     for attribute in field
         .attrs
@@ -227,6 +239,24 @@ fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<Command
                     )));
                 }
                 resolver = Some(meta.value()?.parse()?);
+                return Ok(());
+            }
+            if meta.path.is_ident("args") {
+                if arguments.is_some() {
+                    return Err(meta.error(format!(
+                        "пометка `args` поля `{ident}` указана несколько раз"
+                    )));
+                }
+                arguments = Some(meta.value()?.parse::<Type>()?);
+                return Ok(());
+            }
+            if meta.path.is_ident("ctx") {
+                if with_context {
+                    return Err(meta.error(format!(
+                        "пометка `ctx` поля `{ident}` указана несколько раз"
+                    )));
+                }
+                with_context = true;
                 return Ok(());
             }
             if meta.path.is_ident("ask") || meta.path.is_ident("keep") {
@@ -270,9 +300,23 @@ fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<Command
             format!("поле `{ident}` не может сочетать `with` с `ask` или `keep`"),
         ));
     }
+    if arguments.is_some() && (resolver.is_some() || question.is_some()) {
+        return Err(Error::new(
+            ident.span(),
+            format!("поле `{ident}` не может сочетать `args` с `ask`, `keep` или `with`"),
+        ));
+    }
+    if with_context && arguments.is_none() {
+        return Err(Error::new(
+            ident.span(),
+            format!("поле `{ident}` может содержать `ctx` только вместе с `args`"),
+        ));
+    }
     Ok(CommandField {
         resolver,
         question,
+        arguments,
+        with_context,
         clap_attributes,
     })
 }
@@ -280,5 +324,7 @@ fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<Command
 struct CommandField {
     resolver: Option<Path>,
     question: Option<Question>,
+    arguments: Option<Type>,
+    with_context: bool,
     clap_attributes: Vec<Attribute>,
 }

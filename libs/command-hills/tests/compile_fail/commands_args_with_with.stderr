@@ -1,0 +1,5 @@
+error: поле `value` не может сочетать `args` с `ask`, `keep` или `with`
+  --> tests/compile_fail/commands_args_with_with.rs:14:9
+   |
+14 |         value: String,
+   |         ^^^^^
