@@ -253,7 +253,7 @@ fn parse_hill(
     Ok((question, with_context, resolver))
 }
 
-fn option_inner_type(ty: &Type) -> Option<&Type> {
+pub(crate) fn option_inner_type(ty: &Type) -> Option<&Type> {
     let Type::Path(type_path) = ty else {
         return None;
     };

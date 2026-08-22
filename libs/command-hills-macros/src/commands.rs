@@ -4,8 +4,7 @@ use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    Attribute, Error, Expr, Fields, ItemEnum, LitStr, Meta, Path, Result, Token, Type,
-    parenthesized,
+    Attribute, Error, Expr, Fields, ItemEnum, LitStr, Meta, Path, Result, Token, parenthesized,
 };
 
 use crate::model::{Declaration, Destination, Field};
@@ -45,17 +44,26 @@ pub(crate) fn expand(arguments: TokenStream, input: TokenStream) -> Result<Token
                 .ok_or_else(|| Error::new(field.ty.span(), "ожидалось именованное поле"))?;
             let (resolver, clap_attributes) = parse_command_field(field, &ident)?;
             let ty = field.ty.clone();
-            let option_ty: Type = syn::parse2(quote_spanned!(ty.span()=> Option<#ty>))?;
+            let argument_ty = if resolver.is_some() {
+                syn::parse2(quote_spanned!(ty.span()=> Option<#ty>))?
+            } else if crate::parser::option_inner_type(&ty).is_some() {
+                ty
+            } else {
+                return Err(Error::new(
+                    ident.span(),
+                    format!("поле `{ident}` должно содержать пометку `with`"),
+                ));
+            };
             generated_fields.push(Field {
                 visibility: field.vis.clone(),
                 ident,
-                ty: option_ty,
+                ty: argument_ty,
                 position,
                 clap_attributes,
                 markers: Vec::new(),
                 question: None,
                 with_context: false,
-                resolver: Some(resolver),
+                resolver,
             });
             field
                 .attrs
@@ -185,7 +193,10 @@ fn parse_about(attributes: &[Attribute], variant: &syn::Ident) -> Result<LitStr>
     })
 }
 
-fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<(Path, Vec<Attribute>)> {
+fn parse_command_field(
+    field: &syn::Field,
+    ident: &syn::Ident,
+) -> Result<(Option<Path>, Vec<Attribute>)> {
     let mut resolver = None;
     let mut clap_attributes = Vec::new();
     for attribute in field
@@ -219,11 +230,11 @@ fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<(Path, 
             Ok(())
         })?;
     }
-    let resolver = resolver.ok_or_else(|| {
-        Error::new(
+    if resolver.is_none() && !clap_attributes.is_empty() {
+        return Err(Error::new(
             ident.span(),
-            format!("поле `{ident}` должно содержать пометку `with`"),
-        )
-    })?;
+            format!("поле `{ident}` с атрибутами clap должно содержать пометку `with`"),
+        ));
+    }
     Ok((resolver, clap_attributes))
 }

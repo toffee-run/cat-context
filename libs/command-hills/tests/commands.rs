@@ -107,3 +107,35 @@ fn subcommand_about_is_available_from_command() {
         ]
     );
 }
+
+mod optional_field {
+    use clap::Parser;
+
+    struct Context;
+
+    #[command_hills::commands(context = Context)]
+    #[derive(Debug, PartialEq)]
+    enum Choice {
+        #[hill(about = "change a value")]
+        Change { value: Option<String> },
+    }
+
+    #[derive(Parser)]
+    struct Cli {
+        #[command(subcommand)]
+        choice: ChoiceArgs,
+    }
+
+    #[tokio::test]
+    async fn unmarked_optional_field_is_preserved() {
+        let cli = Cli::try_parse_from(["test", "change"])
+            .expect("опциональное поле должно разбираться без значения");
+
+        assert_eq!(
+            fill(cli.choice, &Context)
+                .await
+                .expect("опциональное поле должно переноситься"),
+            Choice::Change { value: None }
+        );
+    }
+}
