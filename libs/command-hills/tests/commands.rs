@@ -5,9 +5,13 @@ struct Context {
     suffix: String,
 }
 
-async fn resolve_stop(given: Option<String>, context: &Context) -> command_hills::Result<String> {
+async fn resolve_stop(
+    given: Option<String>,
+    context: &Context,
+    message: &str,
+) -> command_hills::Result<String> {
     Ok(format!(
-        "{}{}",
+        "{}{}:{message}",
         given.unwrap_or_else(|| "stopped".to_owned()),
         context.suffix
     ))
@@ -26,7 +30,11 @@ async fn resolve_delete(given: Option<String>, context: &Context) -> command_hil
 enum Action {
     #[hill(about = "stop a container")]
     Stop {
-        #[hill(with = resolve_stop, arg(long, value_name = "NAME"))]
+        #[hill(
+            with = resolve_stop,
+            message = "Container",
+            arg(long, value_name = "NAME")
+        )]
         container: String,
     },
     #[hill(about = "delete a container")]
@@ -55,7 +63,7 @@ async fn subcommands_parse_without_arguments_and_fill_actions() {
             .await
             .expect("stop должна заполняться"),
         Action::Stop {
-            container: "stopped-ctx".to_owned()
+            container: "stopped-ctx:Container".to_owned()
         }
     );
     assert_eq!(
@@ -81,7 +89,7 @@ async fn subcommands_accept_explicit_arguments() {
             .await
             .expect("stop должна заполняться"),
         Action::Stop {
-            container: "web-ctx".to_owned()
+            container: "web-ctx:Container".to_owned()
         }
     );
 }

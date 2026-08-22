@@ -161,7 +161,7 @@ fn parse_field(field: &SynField, position: usize) -> Result<Field> {
         .clone()
         .ok_or_else(|| Error::new(field.ty.span(), "ожидалось именованное поле"))?;
     let markers = parse_markers(field, &ident)?;
-    let (question, with_context, resolver) = parse_hill(field, &ident)?;
+    let hill = parse_hill(field, &ident)?;
 
     Ok(Field {
         visibility: field.vis.clone(),
@@ -170,19 +170,18 @@ fn parse_field(field: &SynField, position: usize) -> Result<Field> {
         position,
         clap_attributes: clap_attributes(&field.attrs),
         markers,
-        question,
-        with_context,
-        resolver,
+        question: hill.question,
+        with_context: hill.with_context,
+        resolver: hill.resolver,
+        resolver_message: hill.resolver_message,
     })
 }
 
-fn parse_hill(
-    field: &SynField,
-    field_ident: &syn::Ident,
-) -> Result<(Option<Question>, bool, Option<syn::Path>)> {
+fn parse_hill(field: &SynField, field_ident: &syn::Ident) -> Result<Hill> {
     let mut question = None;
     let mut with_context = false;
     let mut resolver = None;
+    let mut resolver_message = None;
 
     for attribute in field
         .attrs
@@ -206,6 +205,15 @@ fn parse_hill(
                     )));
                 }
                 resolver = Some(meta.value()?.parse::<syn::Path>()?);
+                return Ok(());
+            }
+            if meta.path.is_ident("message") {
+                if resolver_message.is_some() {
+                    return Err(meta.error(format!(
+                        "параметр `message` поля `{field_ident}` указан несколько раз"
+                    )));
+                }
+                resolver_message = Some(meta.value()?.parse()?);
                 return Ok(());
             }
 
@@ -243,6 +251,12 @@ fn parse_hill(
             format!("поле `{field_ident}` не может сочетать `with` с вопросом или `ctx`"),
         ));
     }
+    if resolver_message.is_some() && resolver.is_none() {
+        return Err(Error::new(
+            field_ident.span(),
+            format!("поле `{field_ident}` может содержать `message` только вместе с `with`"),
+        ));
+    }
     if question.is_some() && option_inner_type(&field.ty).is_none() {
         return Err(Error::new_spanned(
             &field.ty,
@@ -250,7 +264,19 @@ fn parse_hill(
         ));
     }
 
-    Ok((question, with_context, resolver))
+    Ok(Hill {
+        question,
+        with_context,
+        resolver,
+        resolver_message,
+    })
+}
+
+struct Hill {
+    question: Option<Question>,
+    with_context: bool,
+    resolver: Option<syn::Path>,
+    resolver_message: Option<syn::LitStr>,
 }
 
 pub(crate) fn option_inner_type(ty: &Type) -> Option<&Type> {

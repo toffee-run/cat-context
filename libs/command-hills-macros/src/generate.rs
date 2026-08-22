@@ -73,10 +73,15 @@ fn resolve_field(field: &Field, has_context: bool) -> Result<TokenStream> {
     let span = ident.span();
 
     if let Some(resolver) = &field.resolver {
-        return Ok(if has_context {
-            quote_spanned! {span=> #ident: #resolver(self.#ident, ctx).await?}
-        } else {
-            quote_spanned! {span=> #ident: #resolver(self.#ident)?}
+        return Ok(match (has_context, &field.resolver_message) {
+            (true, Some(message)) => {
+                quote_spanned! {span=> #ident: #resolver(self.#ident, ctx, #message).await?}
+            }
+            (true, None) => quote_spanned! {span=> #ident: #resolver(self.#ident, ctx).await?},
+            (false, Some(message)) => {
+                quote_spanned! {span=> #ident: #resolver(self.#ident, #message)?}
+            }
+            (false, None) => quote_spanned! {span=> #ident: #resolver(self.#ident)?},
         });
     }
 

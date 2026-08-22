@@ -94,6 +94,7 @@ pub(crate) fn expand(arguments: TokenStream, input: TokenStream) -> Result<Token
                 question: parsed.question,
                 with_context: parsed.with_context,
                 resolver: parsed.resolver,
+                resolver_message: parsed.resolver_message,
             });
             field
                 .attrs
@@ -228,6 +229,7 @@ fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<Command
     let mut question = None;
     let mut arguments = None;
     let mut with_context = false;
+    let mut resolver_message = None;
     let mut clap_attributes = Vec::new();
     for attribute in field
         .attrs
@@ -242,6 +244,15 @@ fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<Command
                     )));
                 }
                 resolver = Some(meta.value()?.parse()?);
+                return Ok(());
+            }
+            if meta.path.is_ident("message") {
+                if resolver_message.is_some() {
+                    return Err(meta.error(format!(
+                        "параметр `message` поля `{ident}` указан несколько раз"
+                    )));
+                }
+                resolver_message = Some(meta.value()?.parse()?);
                 return Ok(());
             }
             if meta.path.is_ident("args") {
@@ -315,11 +326,18 @@ fn parse_command_field(field: &syn::Field, ident: &syn::Ident) -> Result<Command
             format!("поле `{ident}` может содержать `ctx` только вместе с `args`"),
         ));
     }
+    if resolver_message.is_some() && resolver.is_none() {
+        return Err(Error::new(
+            ident.span(),
+            format!("поле `{ident}` может содержать `message` только вместе с `with`"),
+        ));
+    }
     Ok(CommandField {
         resolver,
         question,
         arguments,
         with_context,
+        resolver_message,
         clap_attributes,
     })
 }
@@ -329,5 +347,6 @@ struct CommandField {
     question: Option<Question>,
     arguments: Option<Type>,
     with_context: bool,
+    resolver_message: Option<LitStr>,
     clap_attributes: Vec<Attribute>,
 }

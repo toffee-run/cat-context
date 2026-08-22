@@ -25,6 +25,7 @@ pub(crate) struct Field {
     pub(crate) question: Option<Question>,
     pub(crate) with_context: bool,
     pub(crate) resolver: Option<Path>,
+    pub(crate) resolver_message: Option<syn::LitStr>,
 }
 
 pub(crate) enum Question {
