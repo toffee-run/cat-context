@@ -23,6 +23,23 @@ impl fmt::Display for Choice {
     }
 }
 
+#[cfg(test)]
+mod choice_tests {
+    use super::*;
+
+    #[test]
+    fn choice_formats_as_its_label() {
+        let choice = Choice {
+            name: "start".to_owned(),
+            label: "запустить новый контейнер".to_owned(),
+        };
+
+        assert_eq!(choice.name, "start");
+        assert_eq!(choice.label, "запустить новый контейнер");
+        assert_eq!(choice.to_string(), "запустить новый контейнер");
+    }
+}
+
 pub fn action(choices: Vec<Choice>) -> Result<String> {
     let chosen = Select::new("Что сделать?", choices).prompt()?;
     Ok(chosen.name)
@@ -61,6 +78,52 @@ pub async fn container(docker: &Docker, given: Option<String>, message: &str) ->
 
     let chosen = Select::new(message, containers).prompt()?;
     Ok(chosen.name)
+}
+
+#[cfg(test)]
+mod given_tests {
+    use super::*;
+    use crate::Base;
+    use bollard::Docker;
+
+    #[test]
+    fn given_variant_returns_without_dialog() {
+        assert_eq!(
+            variant("Базовый образ", Some(Base::Alpine)).unwrap(),
+            Base::Alpine
+        );
+        assert_eq!(
+            variant("Базовый образ", Some(Base::Arch)).unwrap(),
+            Base::Arch
+        );
+        assert_eq!(
+            variant("Базовый образ", Some(Base::Debian)).unwrap(),
+            Base::Debian
+        );
+    }
+
+    #[test]
+    fn given_variant_or_keep_returns_some_without_dialog() {
+        assert_eq!(
+            variant_or_keep("Базовый образ", Some(Base::Alpine)).unwrap(),
+            Some(Base::Alpine)
+        );
+        assert_eq!(
+            variant_or_keep("Базовый образ", Some(Base::Arch)).unwrap(),
+            Some(Base::Arch)
+        );
+    }
+
+    #[tokio::test]
+    async fn given_container_returns_without_docker_call() {
+        let docker = Docker::connect_with_host("tcp://127.0.0.1:1").unwrap();
+        assert_eq!(
+            container(&docker, Some("custom-cat".to_owned()), "Вопрос")
+                .await
+                .unwrap(),
+            "custom-cat"
+        );
+    }
 }
 
 pub fn prompt() -> Result<Prompt> {
@@ -236,6 +299,43 @@ mod autocomplete_tests {
             Some(dir.join("plan.md"))
         );
     }
+
+    #[test]
+    fn autocomplete_returns_none_when_no_suggestions_match() {
+        let dir = TempDir::new("autocomplete-empty");
+        let input = format!("{}/nonexistent", dir.0.to_string_lossy());
+        let mut paths = MarkdownPaths;
+
+        assert!(
+            paths
+                .get_suggestions(&input)
+                .expect("подсказки собраны")
+                .is_empty()
+        );
+        assert_eq!(
+            paths
+                .get_completion(&input, None)
+                .expect("дополнение получено"),
+            None
+        );
+    }
+
+    #[test]
+    fn autocomplete_computes_common_prefix_across_multiple_matches() {
+        let dir = TempDir::new("autocomplete-prefix");
+        fs::write(dir.join("plan-step-1.md"), "").expect("файл создан");
+        fs::write(dir.join("plan-step-2.md"), "").expect("файл создан");
+
+        let input = format!("{}/pl", dir.0.to_string_lossy());
+        let mut paths = MarkdownPaths;
+
+        assert_eq!(
+            paths
+                .get_completion(&input, None)
+                .expect("дополнение получено"),
+            Some(dir.join("plan-step-"))
+        );
+    }
 }
 
 fn suggestions(input: &str) -> Vec<String> {
@@ -301,6 +401,25 @@ mod suggestions_tests {
     fn suggestions_of_a_missing_directory_are_empty() {
         assert!(suggestions("/no/such/directory/x").is_empty());
     }
+
+    #[test]
+    fn suggestions_are_sorted_alphabetically() {
+        let dir = TempDir::new("sorted");
+        fs::write(dir.join("c_plan.md"), "").expect("файл создан");
+        fs::write(dir.join("a_plan.md"), "").expect("файл создан");
+        fs::write(dir.join("b_plan.md"), "").expect("файл создан");
+
+        let found = suggestions(&format!("{}/", dir.0.to_string_lossy()));
+
+        assert_eq!(
+            found,
+            vec![
+                dir.join("a_plan.md"),
+                dir.join("b_plan.md"),
+                dir.join("c_plan.md"),
+            ]
+        );
+    }
 }
 
 fn split_path(input: &str) -> (String, String) {
@@ -323,6 +442,12 @@ mod split_path_tests {
         assert_eq!(split_path("plan"), (String::new(), "plan".to_owned()));
         assert_eq!(split_path("docs/"), ("docs/".to_owned(), String::new()));
         assert_eq!(split_path("/etc/ho"), ("/etc/".to_owned(), "ho".to_owned()));
+        assert_eq!(split_path(""), (String::new(), String::new()));
+        assert_eq!(split_path("/"), ("/".to_owned(), String::new()));
+        assert_eq!(
+            split_path("a/b/c/plan.md"),
+            ("a/b/c/".to_owned(), "plan.md".to_owned())
+        );
     }
 }
 
@@ -361,6 +486,22 @@ mod common_prefix_tests {
         assert_eq!(
             common_prefix(vec!["plan.md".to_owned(), "notes.md".to_owned()]),
             Some(String::new())
+        );
+        assert_eq!(
+            common_prefix(vec![
+                "test-1".to_owned(),
+                "test-2".to_owned(),
+                "test-3".to_owned(),
+            ]),
+            Some("test-".to_owned())
+        );
+        assert_eq!(
+            common_prefix(vec![
+                "short".to_owned(),
+                "shorter".to_owned(),
+                "shortest".to_owned(),
+            ]),
+            Some("short".to_owned())
         );
     }
 }
