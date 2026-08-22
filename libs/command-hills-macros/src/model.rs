@@ -4,10 +4,15 @@ pub(crate) struct Declaration {
     pub(crate) visibility: Visibility,
     pub(crate) ident: Ident,
     pub(crate) generics: Generics,
-    pub(crate) target: Path,
+    pub(crate) destination: Destination,
     pub(crate) context: Option<Path>,
     pub(crate) clap_attributes: Vec<Attribute>,
     pub(crate) fields: Vec<Field>,
+}
+
+pub(crate) struct Destination {
+    pub(crate) initializer: Path,
+    pub(crate) result: Path,
 }
 
 pub(crate) struct Field {

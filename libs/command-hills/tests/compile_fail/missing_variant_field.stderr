@@ -1,0 +1,5 @@
+error[E0063]: missing field `memory` in initializer of `Action`
+ --> tests/compile_fail/missing_variant_field.rs:8:33
+  |
+8 | #[command_hills::fill(variant = Action::Restart)]
+  |                                 ^^^^^^^^^^^^^^^ missing `memory`

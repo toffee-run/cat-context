@@ -1,0 +1,7 @@
+error[E0559]: variant `Action::Restart` has no field named `memory`
+ --> tests/compile_fail/extra_variant_field.rs:8:5
+  |
+8 |     memory: Option<String>,
+  |     ^^^^^^ `Action::Restart` does not have this field
+  |
+  = note: all struct fields are already assigned
