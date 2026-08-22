@@ -1,0 +1,5 @@
+error[E0063]: missing field `memory` in initializer of `Target`
+ --> tests/compile_fail/missing_declaration_field.rs:8:32
+  |
+8 | #[command_hills::fill(target = Target, context = Context)]
+  |                                ^^^^^^ missing `memory`

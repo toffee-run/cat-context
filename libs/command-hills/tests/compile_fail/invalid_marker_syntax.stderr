@@ -1,0 +1,5 @@
+error: пометка `Only` поля `memory` должна содержать ровно один тип
+  --> tests/compile_fail/invalid_marker_syntax.rs:10:13
+   |
+10 |     memory: command_hills::Only,
+   |             ^^^^^^^^^^^^^^^^^^^

@@ -1,0 +1,5 @@
+error: неизвестный параметр `unknown`
+ --> tests/compile_fail/unknown_macro_parameter.rs:7:59
+  |
+7 | #[command_hills::fill(target = Target, context = Context, unknown = Bar)]
+  |                                                           ^^^^^^^
