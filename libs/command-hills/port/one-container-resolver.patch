@@ -1,0 +1,57 @@
+diff --git a/src/cli.rs b/src/cli.rs
+index bbd7631..50e9297 100644
+--- a/src/cli.rs
++++ b/src/cli.rs
+@@ -94,16 +94,8 @@ impl Resolve<bool> for SaveArgs {
+     }
+ }
+ 
+-pub async fn stop_container(given: Option<String>, docker: &Docker) -> Result<String> {
+-    ask::container(docker, given, "Какой контейнер остановить?").await
+-}
+-
+-pub async fn delete_container(given: Option<String>, docker: &Docker) -> Result<String> {
+-    ask::container(docker, given, "Какой контейнер удалить?").await
+-}
+-
+-pub async fn restart_container(given: Option<String>, docker: &Docker) -> Result<String> {
+-    ask::container(docker, given, "Какой контейнер пересоздать?").await
++pub async fn container(given: Option<String>, docker: &Docker, message: &str) -> Result<String> {
++    ask::container(docker, given, message).await
+ }
+ 
+ #[cfg(test)]
+diff --git a/src/lib.rs b/src/lib.rs
+index f93c9d0..45c3e25 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -50,7 +50,8 @@ pub enum Action {
+     #[hill(about = "пересоздать контейнер")]
+     Restart {
+         #[hill(
+-            with = cli::restart_container,
++            with = cli::container,
++            message = "Какой контейнер пересоздать?",
+             arg(
+                 long,
+                 value_name = "NAME",
+@@ -68,7 +69,8 @@ pub enum Action {
+     #[hill(about = "остановить контейнер")]
+     Stop {
+         #[hill(
+-            with = cli::stop_container,
++            with = cli::container,
++            message = "Какой контейнер остановить?",
+             arg(
+                 long,
+                 value_name = "NAME",
+@@ -80,7 +82,8 @@ pub enum Action {
+     #[hill(about = "удалить контейнер")]
+     Delete {
+         #[hill(
+-            with = cli::delete_container,
++            with = cli::container,
++            message = "Какой контейнер удалить?",
+             arg(
+                 long,
+                 value_name = "NAME",
