@@ -1,9 +1,35 @@
 use std::fmt;
 
-use clap::ValueEnum;
+use clap::{CommandFactory, ValueEnum};
 use inquire::Select;
 
 use crate::Result;
+
+pub fn ask_subcommand<Root: CommandFactory>(message: &str) -> Result<String> {
+    let choices = Root::command()
+        .get_subcommands()
+        .map(|command| CommandChoice {
+            name: command.get_name().to_owned(),
+            label: command
+                .get_about()
+                .map_or_else(|| command.get_name().to_owned(), ToString::to_string),
+        })
+        .collect();
+    Select::new(message, choices)
+        .prompt()
+        .map(|choice| choice.name)
+}
+
+struct CommandChoice {
+    name: String,
+    label: String,
+}
+
+impl fmt::Display for CommandChoice {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.label)
+    }
+}
 
 pub fn ask_variant<T>(message: &str, given: Option<T>) -> Result<T>
 where
