@@ -94,16 +94,8 @@ impl Resolve<bool> for SaveArgs {
     }
 }
 
-pub async fn stop_container(given: Option<String>, docker: &Docker) -> Result<String> {
-    ask::container(docker, given, "Какой контейнер остановить?").await
-}
-
-pub async fn delete_container(given: Option<String>, docker: &Docker) -> Result<String> {
-    ask::container(docker, given, "Какой контейнер удалить?").await
-}
-
-pub async fn restart_container(given: Option<String>, docker: &Docker) -> Result<String> {
-    ask::container(docker, given, "Какой контейнер пересоздать?").await
+pub async fn container(given: Option<String>, docker: &Docker, message: &str) -> Result<String> {
+    ask::container(docker, given, message).await
 }
 
 #[cfg(test)]

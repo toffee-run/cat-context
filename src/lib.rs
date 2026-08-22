@@ -50,7 +50,8 @@ pub enum Action {
     #[hill(about = "пересоздать контейнер")]
     Restart {
         #[hill(
-            with = cli::restart_container,
+            with = cli::container,
+            message = "Какой контейнер пересоздать?",
             arg(
                 long,
                 value_name = "NAME",
@@ -68,7 +69,8 @@ pub enum Action {
     #[hill(about = "остановить контейнер")]
     Stop {
         #[hill(
-            with = cli::stop_container,
+            with = cli::container,
+            message = "Какой контейнер остановить?",
             arg(
                 long,
                 value_name = "NAME",
@@ -80,7 +82,8 @@ pub enum Action {
     #[hill(about = "удалить контейнер")]
     Delete {
         #[hill(
-            with = cli::delete_container,
+            with = cli::container,
+            message = "Какой контейнер удалить?",
             arg(
                 long,
                 value_name = "NAME",
