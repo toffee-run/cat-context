@@ -167,6 +167,7 @@ dependencies = [
  "clap_complete",
  "command-hills-macros",
  "inquire",
+ "tokio",
  "trybuild",
 ]
 

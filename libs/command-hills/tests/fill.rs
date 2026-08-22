@@ -17,12 +17,12 @@ struct PromptArgs {
 }
 
 impl Resolve<Prompt> for PromptArgs {
-    fn resolve(self) -> Prompt {
-        Prompt(self.text)
+    fn resolve(self) -> command_hills::Result<Prompt> {
+        Ok(Prompt(self.text))
     }
 }
 
-#[command_hills::fill(target = Target, context = Context)]
+#[command_hills::fill(target = Target)]
 struct Command {
     #[arg(long)]
     base: Option<String>,
@@ -30,15 +30,13 @@ struct Command {
     prompt: PromptArgs,
 }
 
-struct Context;
-
 #[test]
 fn parses_arguments_and_resolves_target() {
     let command = Command::try_parse_from(["test", "--base", "alpine", "--text", "hello"])
         .expect("аргументы должны разбираться");
 
     assert_eq!(
-        command.resolve(&Context),
+        command.resolve().expect("цель должна разрешаться"),
         Target {
             base: Some("alpine".to_owned()),
             prompt: Prompt("hello".to_owned()),
