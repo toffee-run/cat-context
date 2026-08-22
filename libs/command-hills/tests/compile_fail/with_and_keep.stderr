@@ -1,0 +1,5 @@
+error: поле `container` не может сочетать `with` с вопросом или `ctx`
+ --> tests/compile_fail/with_and_keep.rs:8:5
+  |
+8 |     container: Option<String>,
+  |     ^^^^^^^^^
