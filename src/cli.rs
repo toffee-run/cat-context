@@ -1,30 +1,13 @@
 use std::path::{Path, PathBuf};
 
 use bollard::Docker;
-use clap::{CommandFactory, Parser};
+use clap::CommandFactory;
 use clap_complete::CompleteEnv;
-use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter, PathCompleter};
+use clap_complete::engine::{ArgValueCompleter, PathCompleter};
 use command_hills::{Resolve, Result};
 
+use crate::Prompt;
 use crate::ask;
-use crate::{ActionArgs, Command, Prompt, complete, fill};
-
-#[derive(Parser)]
-#[command(name = "cat-context", version)]
-struct Cli {
-    #[arg(
-        long,
-        global = true,
-        env = "DOCKER_HOST",
-        value_name = "URL",
-        value_parser = Docker::connect_with_host,
-        add = ArgValueCandidates::new(complete::endpoints),
-    )]
-    connect: Option<Docker>,
-
-    #[command(subcommand)]
-    action: Option<ActionArgs>,
-}
 
 #[derive(clap::Args, Debug, Default)]
 #[group(multiple = false)]
@@ -101,7 +84,8 @@ pub async fn container(given: Option<String>, docker: &Docker, message: &str) ->
 #[cfg(test)]
 mod argument_tests {
     use super::*;
-    use crate::{Agent, Base};
+    use crate::{ActionArgs, Agent, Base, Cli};
+    use clap::Parser;
 
     fn action_of(args: &[&str]) -> ActionArgs {
         Cli::try_parse_from(args)
@@ -319,24 +303,10 @@ mod resolve_save_tests {
 }
 
 pub fn complete() {
-    CompleteEnv::with_factory(Cli::command).complete();
+    CompleteEnv::with_factory(crate::Cli::command).complete();
 }
 
-pub async fn command() -> ask::Result<Command> {
-    let cli = Cli::parse();
-
-    let connect = endpoint(cli.connect);
-
-    let args = match cli.action {
-        Some(args) => args,
-        None => ask_action()?,
-    };
-
-    let action = fill(args, &connect).await?;
-    Ok(Command { connect, action })
-}
-
-fn endpoint(given: Option<Docker>) -> Docker {
+pub fn endpoint(given: Option<Docker>) -> Docker {
     match given {
         Some(docker) => docker,
         None => Docker::connect_with_defaults().expect("подключение по умолчанию"),
@@ -363,7 +333,8 @@ mod endpoint_tests {
 mod fill_tests {
     use super::fixtures::offline_docker;
     use super::*;
-    use crate::{Action, Agent, Base};
+    use crate::{Action, Agent, Base, Cli, fill};
+    use clap::Parser;
 
     async fn action_from(args: &[&str]) -> Action {
         let action = Cli::try_parse_from(args)
@@ -490,62 +461,6 @@ mod fill_tests {
 
         assert!(matches!(stopped, Action::Stop { container } if container == "cat-arch-codex"));
         assert!(matches!(deleted, Action::Delete { container } if container == "cat-debian-codex"));
-    }
-}
-
-fn ask_action() -> ask::Result<ActionArgs> {
-    let chosen = ask::action(action_choices())?;
-
-    let args = Cli::try_parse_from(["cat-context", &chosen])
-        .expect("подкоманда без аргументов разбирается")
-        .action
-        .expect("подкоманда названа");
-
-    Ok(args)
-}
-
-fn action_choices() -> Vec<ask::Choice> {
-    Cli::command()
-        .get_subcommands()
-        .map(|command| ask::Choice {
-            name: command.get_name().to_owned(),
-            label: match command.get_about() {
-                Some(about) => about.to_string(),
-                None => command.get_name().to_owned(),
-            },
-        })
-        .collect()
-}
-
-#[cfg(test)]
-mod action_choices_tests {
-    use super::*;
-
-    #[test]
-    fn every_subcommand_becomes_a_menu_item() {
-        let choices = action_choices();
-        let names: Vec<&str> = choices.iter().map(|choice| choice.name.as_str()).collect();
-        let labels: Vec<&str> = choices.iter().map(|choice| choice.label.as_str()).collect();
-
-        assert_eq!(names, vec!["start", "restart", "stop", "delete"]);
-        assert_eq!(
-            labels,
-            vec![
-                "запустить новый контейнер",
-                "пересоздать контейнер",
-                "остановить контейнер",
-                "удалить контейнер"
-            ]
-        );
-    }
-
-    #[test]
-    fn a_chosen_name_parses_into_empty_arguments() {
-        for choice in action_choices() {
-            let parsed = Cli::try_parse_from(["cat-context", &choice.name]);
-
-            assert!(parsed.is_ok(), "{}", choice.name);
-        }
     }
 }
 

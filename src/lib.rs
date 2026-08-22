@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use bollard::Docker;
 use clap::ValueEnum;
-use clap_complete::engine::ArgValueCompleter;
+use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter};
 use inquire::InquireError;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, ValueEnum)]
@@ -94,9 +94,23 @@ pub enum Action {
     },
 }
 
+#[command_hills::root(action = Action, ask = "Что сделать?")]
+#[command(name = "cat-context", version)]
+#[derive(Debug)]
 pub struct Command {
+    #[hill(
+        context,
+        with = cli::endpoint,
+        arg(
+            long,
+            global = true,
+            env = "DOCKER_HOST",
+            value_name = "URL",
+            value_parser = Docker::connect_with_host,
+            add = ArgValueCandidates::new(complete::endpoints)
+        )
+    )]
     pub connect: Docker,
-    pub action: Action,
 }
 
 impl fmt::Display for Base {
@@ -114,7 +128,7 @@ impl fmt::Display for Agent {
 }
 
 pub async fn run() -> u8 {
-    exit_code(cli::command().await)
+    exit_code(Command::parse().await)
 }
 
 pub fn exit_code(result: ask::Result<Command>) -> u8 {

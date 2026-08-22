@@ -40,11 +40,6 @@ mod choice_tests {
     }
 }
 
-pub fn action(choices: Vec<Choice>) -> Result<String> {
-    let chosen = Select::new("Что сделать?", choices).prompt()?;
-    Ok(chosen.name)
-}
-
 pub fn variant<T>(message: &str, given: Option<T>) -> Result<T>
 where
     T: ValueEnum + Clone + fmt::Display + 'static,
