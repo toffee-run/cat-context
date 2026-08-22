@@ -1,0 +1,5 @@
+error: поле `base` с пометкой `ctx` должно быть flatten
+  --> tests/compile_fail/ctx_without_flatten.rs:10:5
+   |
+10 |     base: String,
+   |     ^^^^

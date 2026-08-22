@@ -1,0 +1,5 @@
+error: полю `base` с пометкой `ctx` нужен context у fill
+  --> tests/compile_fail/ctx_without_context_type.rs:20:5
+   |
+20 |     base: BaseArgs,
+   |     ^^^^

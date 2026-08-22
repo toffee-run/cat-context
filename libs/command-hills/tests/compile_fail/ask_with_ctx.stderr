@@ -1,0 +1,5 @@
+error: поле `base` не может одновременно содержать вопрос и `ctx`
+  --> tests/compile_fail/ask_with_ctx.rs:11:5
+   |
+11 |     base: Option<String>,
+   |     ^^^^
