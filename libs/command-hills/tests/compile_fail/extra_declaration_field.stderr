@@ -1,0 +1,7 @@
+error[E0560]: struct `Target` has no field named `memory`
+  --> tests/compile_fail/extra_declaration_field.rs:10:5
+   |
+10 |     memory: Option<String>,
+   |     ^^^^^^ `Target` does not have this field
+   |
+   = note: all struct fields are already assigned
