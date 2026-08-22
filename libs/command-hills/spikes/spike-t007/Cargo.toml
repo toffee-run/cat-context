@@ -1,0 +1,11 @@
+[package]
+name = "spike-t007"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+clap = { version = "4.6.6", default-features = false, features = ["unstable-ext", "error-context", "std", "suggestions", "usage", "derive", "env", "string"] }
+command-hills = { path = "../.." }
+
+[workspace]
