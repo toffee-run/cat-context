@@ -1,18 +1,19 @@
-pub struct NoCtx;
 use clap::{Parser, Subcommand, CommandFactory};
 use command_hills::fill;
 
 pub struct Ctx;
 
+#[derive(Debug)]
 pub struct Start {
     pub name: String,
 }
 
+#[derive(Debug)]
 pub struct Restart {
     pub name: String,
 }
 
-#[fill(target = Start, context = NoCtx)]
+#[fill(target = Start)]
 pub struct StartArgs {
     #[arg(long)]
     pub name: String,
@@ -43,24 +44,29 @@ pub enum Cmd {
     Restart(RestartArgs),
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> command_hills::Result<()> {
     let app = Cli::command();
     for subcmd in app.get_subcommands() {
         println!("name: {}, about: {}", subcmd.get_name(), subcmd.get_about().unwrap_or_default());
     }
 
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(c) => c,
+        Err(_) => return Ok(()),
+    };
     
-    // Dispatch
     let ctx = Ctx;
     match cli.cmd {
         Cmd::Start(args) => {
-            let action = args.resolve(&NoCtx);
+            let action = args.resolve()?;
             println!("Start: {}", action.name);
         }
         Cmd::Restart(args) => {
-            let action = args.resolve(&ctx);
+            let action = args.resolve(&ctx).await?;
             println!("Restart: {}", action.name);
         }
     }
+    
+    Ok(())
 }
