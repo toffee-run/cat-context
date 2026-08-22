@@ -1,0 +1,5 @@
+error: неизвестная пометка поля `value`
+ --> tests/compile_fail/fill_error_preserves_struct.rs:7:12
+  |
+7 |     #[hill(unknown = "x")]
+  |            ^^^^^^^
