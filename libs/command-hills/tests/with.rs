@@ -9,6 +9,23 @@ fn resolve_container(given: Option<String>) -> command_hills::Result<String> {
     Ok(given.unwrap_or_else(|| "chosen".to_owned()))
 }
 
+fn resolve_container_with_message(
+    given: Option<String>,
+    message: &str,
+) -> command_hills::Result<String> {
+    Ok(format!(
+        "{}:{message}",
+        given.unwrap_or_else(|| "chosen".to_owned())
+    ))
+}
+
+#[command_hills::fill(target = Target)]
+struct MessageCommand {
+    #[arg(long)]
+    #[hill(with = resolve_container_with_message, message = "Container")]
+    container: Option<String>,
+}
+
 #[command_hills::fill(target = Target)]
 struct Command {
     #[arg(long)]
@@ -31,6 +48,28 @@ async fn resolve_container_with_ctx(
     ))
 }
 
+async fn resolve_container_with_ctx_and_message(
+    given: Option<String>,
+    context: &Context,
+    message: &str,
+) -> command_hills::Result<String> {
+    Ok(format!(
+        "{}{}:{message}",
+        given.unwrap_or_else(|| "chosen".to_owned()),
+        context.suffix
+    ))
+}
+
+#[command_hills::fill(target = Target, context = Context)]
+struct ContextMessageCommand {
+    #[arg(long)]
+    #[hill(
+        with = resolve_container_with_ctx_and_message,
+        message = "Container"
+    )]
+    container: Option<String>,
+}
+
 #[command_hills::fill(target = Target, context = Context)]
 struct ContextCommand {
     #[arg(long)]
@@ -50,6 +89,19 @@ fn field_resolves_with_function() {
     );
 }
 
+#[test]
+fn field_resolves_with_message_function() {
+    let command = MessageCommand::try_parse_from(["test", "--container", "web"])
+        .expect("команда должна разбираться");
+
+    assert_eq!(
+        command.resolve().expect("цель должна разрешаться"),
+        Target {
+            container: "web:Container".to_owned(),
+        }
+    );
+}
+
 #[tokio::test]
 async fn field_resolves_with_context_function() {
     let command = ContextCommand::try_parse_from(["test", "--container", "web"])
@@ -65,6 +117,25 @@ async fn field_resolves_with_context_function() {
             .expect("цель должна разрешаться"),
         Target {
             container: "web-1".to_owned(),
+        }
+    );
+}
+
+#[tokio::test]
+async fn field_resolves_with_context_message_function() {
+    let command =
+        ContextMessageCommand::try_parse_from(["test"]).expect("команда должна разбираться");
+    let context = Context {
+        suffix: "-1".to_owned(),
+    };
+
+    assert_eq!(
+        command
+            .resolve(&context)
+            .await
+            .expect("цель должна разрешаться"),
+        Target {
+            container: "chosen-1:Container".to_owned(),
         }
     );
 }

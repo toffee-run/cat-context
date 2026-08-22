@@ -1,0 +1,5 @@
+error: поле `container` может содержать `message` только вместе с `with`
+ --> tests/compile_fail/commands_message_without_with.rs:8:9
+  |
+8 |         container: String,
+  |         ^^^^^^^^^
