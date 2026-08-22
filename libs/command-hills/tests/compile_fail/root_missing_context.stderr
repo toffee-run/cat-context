@@ -1,0 +1,5 @@
+error: поле `connect` должно содержать пометку `context`, чтобы передать контекст в `fill`
+  --> tests/compile_fail/root_missing_context.rs:16:5
+   |
+16 |     connect: Context,
+   |     ^^^^^^^
